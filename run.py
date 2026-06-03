@@ -1,9 +1,12 @@
 """Punto de entrada: levanta el orquestador con el pipeline de audio y abre la ventana.
-Uso: python run.py
+Uso:
+    python run.py              # abre la ventana flotante (pywebview)
+    python run.py --no-window  # solo servidor; abre la UI en tu navegador
 Requiere config.toml (copia de config.example.toml)."""
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 import time
 
@@ -60,12 +63,20 @@ def main() -> None:
     trans.start(cap.stream(), sample_rate=cfg.audio.sample_rate)
 
     url = f"http://{cfg.server.host}:{cfg.server.port}/?token={cfg.server.token}"
-    print("Abriendo ventana:", url)
-    open_window(url)  # bloquea hasta cerrar la ventana
-
-    trans.stop()
-    cap.stop()
-    brain.stop()
+    try:
+        if "--no-window" in sys.argv:
+            print(f"\n  Servidor listo. Abre esta URL en tu navegador:\n  {url}\n")
+            print("  (Ctrl+C para detener)")
+            threading.Event().wait()  # bloquea hasta Ctrl+C
+        else:
+            print("Abriendo ventana:", url)
+            open_window(url)  # bloquea hasta cerrar la ventana
+    except KeyboardInterrupt:
+        pass
+    finally:
+        trans.stop()
+        cap.stop()
+        brain.stop()
 
 
 if __name__ == "__main__":
