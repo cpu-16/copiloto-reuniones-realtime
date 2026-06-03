@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import time
 from collections.abc import Callable
 
 DEFAULT_SYSTEM = (
@@ -52,7 +51,8 @@ class WarmClaude:
         )
 
     def ask(self, text: str, on_delta: Callable[[str], None] | None = None) -> str:
-        assert self.proc.stdin and self.proc.stdout
+        if not (self.proc.stdin and self.proc.stdout):
+            raise RuntimeError("El proceso de Claude no tiene stdin/stdout disponibles.")
         self.proc.stdin.write(build_user_message(text) + "\n")
         self.proc.stdin.flush()
         chunks: list[str] = []
@@ -79,6 +79,8 @@ class WarmClaude:
                 if final and not chunks:
                     chunks.append(final)
                 break
+        if not chunks and self.proc.poll() is not None:
+            raise RuntimeError("El proceso de Claude terminó inesperadamente.")
         return "".join(chunks).strip()
 
     def prewarm(self) -> None:
