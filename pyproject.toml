@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.7",
     "pywebview>=5.1",
     "RealtimeSTT>=0.3.7",
+    "silero-vad>=6",
     "faster-whisper>=1.0",
     "nvidia-cublas-cu12",
     "nvidia-cudnn-cu12",
