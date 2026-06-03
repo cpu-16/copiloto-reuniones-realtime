@@ -16,6 +16,8 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
 
 
 def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
+    # `start_audio` se conserva por estabilidad de firma; run.py (Task 13) arranca el pipeline.
+    _ = start_audio
     app = FastAPI()
     app.state.cfg = cfg
     app.state.brain = brain
@@ -36,7 +38,7 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
 
     async def broadcast(model) -> None:
         dead = []
-        for ws in app.state.clients:
+        for ws in list(app.state.clients):   # snapshot: evita mutación del set durante await
             try:
                 await ws.send_text(model.model_dump_json())
             except Exception:
