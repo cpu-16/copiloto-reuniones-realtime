@@ -1,0 +1,26 @@
+# Copia a config.toml y ajusta
+[user]
+# Nombres con los que te llaman en reuniones (para detectar "¿me preguntan a mí?")
+names = ["Rafael", "Rafa"]
+# Idioma por defecto de las respuestas sugeridas
+reply_language = "es"
+
+[audio]
+# node-id o nombre del monitor del sink. Descúbrelo con scripts/derisk_audio.py.
+# Vacío = se autodetecta el sink por defecto.
+target = ""
+sample_rate = 16000
+
+[whisper]
+model = "turbo"
+compute_type = "float16"
+language = "es"
+
+[claude]
+model = "haiku"
+
+[server]
+host = "127.0.0.1"
+port = 8765
+# Token de acceso a la UI (cámbialo)
+token = "cambia-este-token"
