@@ -31,6 +31,7 @@ def main() -> None:
     loop = asyncio.new_event_loop()
 
     def on_final(text: str) -> None:
+        print("[transcript]", text)  # eco en terminal para diagnóstico
         ev = TranscriptFinal(text=text, ts=0.0)
         fut = asyncio.run_coroutine_threadsafe(app.state.broadcast(ev), loop)
         try:
