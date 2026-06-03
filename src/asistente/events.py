@@ -13,13 +13,13 @@ from pydantic import BaseModel
 class TranscriptPartial(BaseModel):
     type: Literal["transcript.partial"] = "transcript.partial"
     text: str
-    ts: float
+    ts: float  # segundos desde el inicio de la captura
 
 
 class TranscriptFinal(BaseModel):
     type: Literal["transcript.final"] = "transcript.final"
     text: str
-    ts: float
+    ts: float  # segundos desde el inicio de la captura
 
 
 class Suggestion(BaseModel):
@@ -35,18 +35,19 @@ class Status(BaseModel):
 
 
 class AskCommand(BaseModel):
-    type: Literal["ask"]
+    type: Literal["ask"] = "ask"
     text: str
 
 
 class ClearCommand(BaseModel):
-    type: Literal["clear"]
+    type: Literal["clear"] = "clear"
 
 
 ClientEvent = Union[AskCommand, ClearCommand]
 
 
 def parse_client_event(raw: str) -> ClientEvent:
+    # Si la unión crece a varios comandos, considera un discriminated union de pydantic.
     data = json.loads(raw)
     kind = data.get("type")
     if kind == "ask":
