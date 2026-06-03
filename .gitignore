@@ -6,3 +6,4 @@ config.toml
 .pytest_cache/
 models/
 *.egg-info/
+*.log
