@@ -18,9 +18,10 @@ import uvicorn
 from asistente.config import load_config
 from asistente.brain.claude_client import WarmClaude
 from asistente.capture.pipewire import PipeWireCapture
-from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status
+from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status, Insight
 from asistente.detect import is_question_for_me
 from asistente.transcribe.clean import is_hallucination
+from asistente.copilot import build_copilot_prompt, parse_copilot
 from asistente.server.app import create_app
 from asistente.ui.launcher import open_window
 
@@ -58,15 +59,21 @@ def main() -> None:
     # Buffer rodante de contexto reciente para alimentar a Claude.
     # Lo compartimos con el servidor para que el "preguntar" manual también
     # use el contexto de la reunión, no solo el proactivo.
-    ctx = deque(maxlen=8)
+    ctx = deque(maxlen=12)
     app.state.ctx = ctx
     names = cfg.user.names
     yo = names[0] if names else "la persona"
+    # Estado del copiloto: borrador de respuesta siempre listo + control de novedad.
+    cop = {"draft": "", "seen": 0}
 
     def suggest_for(question: str) -> None:
-        """Genera una sugerencia con el contexto reciente (en su propio hilo)."""
+        """Sugiere respuesta. Si ya hay un borrador listo, lo muestra al instante
+        y luego lo refina con la pregunta concreta."""
+        if cop["draft"]:
+            _push(Suggestion(text=cop["draft"], ready=True))  # instantáneo
         contexto = "\n".join(ctx)
         prompt = (
+            f"Eres copiloto de {yo} ({cfg.user.role}). "
             f"Contexto reciente de la reunión:\n{contexto}\n\n"
             f"Acaban de preguntarle algo a {yo}: \"{question}\". "
             f"Sugiere una respuesta breve y natural que {yo} podría decir."
@@ -78,6 +85,24 @@ def main() -> None:
             _push(Status(state="capturando"))
         except Exception as e:  # noqa: BLE001
             _push(Status(state="error", detail=str(e)))
+
+    def copilot_loop() -> None:
+        """Cada intervalo, si hay transcripción nueva, pide al cerebro un resumen +
+        ideas + borrador + alerta de decisión/tarea, y lo difunde como Insight."""
+        while True:
+            time.sleep(max(3.0, cfg.copilot.interval_s))
+            if len(ctx) <= cop["seen"]:
+                continue  # nada nuevo
+            cop["seen"] = len(ctx)
+            contexto = "\n".join(ctx)
+            try:
+                raw = brain.ask(build_copilot_prompt(cfg.user.role, names, contexto))
+                p = parse_copilot(raw)
+                if p["draft"]:
+                    cop["draft"] = p["draft"]
+                _push(Insight(summary=p["summary"], ideas=p["ideas"], alert=p["alert"]))
+            except Exception as e:  # noqa: BLE001
+                print("  copiloto:", e)
 
     # Cooldown para no disparar la sugerencia muchas veces por la misma pregunta.
     _sg = {"t": 0.0}
@@ -153,6 +178,10 @@ def main() -> None:
         print("Aviso: prewarm falló:", e)
 
     trans.start(cap.stream(), sample_rate=cfg.audio.sample_rate)
+
+    if cfg.copilot.enabled:
+        print(f"Copiloto continuo activo (cada {cfg.copilot.interval_s:.0f}s).")
+        threading.Thread(target=copilot_loop, daemon=True).start()
 
     url = f"http://{cfg.server.host}:{cfg.server.port}/?token={cfg.server.token}"
     ws_url = f"ws://{cfg.server.host}:{cfg.server.port}/ws?token={cfg.server.token}"

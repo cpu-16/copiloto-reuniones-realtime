@@ -10,6 +10,13 @@ from pydantic import BaseModel
 class UserCfg(BaseModel):
     names: list[str] = []
     reply_language: str = "es"
+    # Quién eres y qué buscas en las reuniones; la IA adapta sus sugerencias.
+    role: str = "un participante de la reunión"
+
+
+class CopilotCfg(BaseModel):
+    enabled: bool = True
+    interval_s: float = 15.0   # cada cuánto el copiloto analiza el contexto
 
 
 class AudioCfg(BaseModel):
@@ -43,6 +50,7 @@ class Config(BaseModel):
     audio: AudioCfg = AudioCfg()
     whisper: WhisperCfg = WhisperCfg()
     claude: ClaudeCfg = ClaudeCfg()
+    copilot: CopilotCfg = CopilotCfg()
     server: ServerCfg = ServerCfg()
 
 

@@ -28,6 +28,14 @@ class Suggestion(BaseModel):
     ready: bool = False  # True cuando se detectó pregunta directa (Fase 2)
 
 
+class Insight(BaseModel):
+    """Copiloto continuo: lo que la IA infiere del contexto en tiempo real."""
+    type: Literal["insight"] = "insight"
+    summary: str = ""     # de qué se está hablando
+    ideas: str = ""       # 1-2 cosas que el usuario podría decir/preguntar
+    alert: str = ""       # decisión o tarea detectada (vacío si no hay)
+
+
 class Status(BaseModel):
     type: Literal["status"] = "status"
     state: str           # "capturando", "pensando", "error", ...

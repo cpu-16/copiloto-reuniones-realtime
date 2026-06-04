@@ -9,6 +9,12 @@ engine = "parakeet"
 names = ["Rafael", "Rafa"]
 # Idioma por defecto de las respuestas sugeridas
 reply_language = "es"
+# Quién eres y qué buscas: la IA adapta sus sugerencias a tu rol/estilo.
+role = "un participante de la reunión"
+
+[copilot]
+enabled = true        # copiloto continuo: resumen + ideas + borrador + alertas
+interval_s = 15.0     # cada cuántos s analiza el contexto (más alto = menos cuota)
 
 [audio]
 # node-id o nombre del monitor del sink. Descúbrelo con scripts/derisk_audio.py.

@@ -1,32 +1,33 @@
 """Ventana flotante NATIVA (PySide6 / QtWidgets) — sin QtWebEngine.
 
-QtWebEngine (el motor de navegador de pywebview) segfaultea en este Wayland, pero
-QtWidgets es estable. Este widget se conecta al orquestador por WebSocket (QWebSocket)
-y muestra: estado, transcripción en vivo (con línea de parcial), tarjeta de sugerencia
-y una caja para preguntarle a Claude. Es frameless, siempre-encima y arrastrable.
-
-Controles en la barra: tema (oscuro/claro/vidrio), minimizar (–), expandir (⤢), cerrar (✕).
-Esquina inferior derecha: agarre para redimensionar.
+Se conecta al orquestador por WebSocket (QWebSocket) y muestra: estado, panel del
+copiloto (resumen + ideas + alerta), transcripción en vivo, tarjeta de sugerencia,
+botones rápidos y una caja para preguntarle a Claude. Frameless, siempre-encima,
+arrastrable. Temas: oscuro/claro/vidrio. Controles: minimizar, expandir, cerrar.
 """
 from __future__ import annotations
 
 import os
 
-# En Wayland nativo los clientes no pueden fijar always-on-top ni posicionar
-# ventanas frameless de forma fiable; forzamos XWayland (xcb).
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # XWayland: frameless/on-top fiables
 
 import json  # noqa: E402
 
-from PySide6.QtCore import Qt, QUrl, QSize  # noqa: E402
+from PySide6.QtCore import Qt, QUrl  # noqa: E402
 from PySide6.QtWebSockets import QWebSocket  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
     QLineEdit, QPushButton, QFrame, QSizeGrip,
 )
 
-# Cada tema define colores (con alfa para transparencia). El fondo translúcido
-# funciona porque la ventana tiene WA_TranslucentBackground activado.
+# Botones rápidos: (etiqueta, instrucción que se manda a Claude con el contexto vivo)
+QUICK_ACTIONS = [
+    ("💡 Ideas", "Dame 2-3 ideas o aportes inteligentes que yo podría decir o preguntar ahora mismo."),
+    ("📝 Resumen", "Resume en 3 viñetas breves lo que se ha hablado hasta ahora."),
+    ("❓ ¿Qué pregunto?", "Sugiéreme 2 buenas preguntas que yo podría hacer ahora."),
+    ("🙋 Responder", "Ayúdame a responder lo último que se dijo, con una respuesta breve que yo podría dar."),
+]
+
 THEMES = [
     {  # oscuro
         "root": "rgba(20,20,26,235)", "bar": "rgba(27,27,34,240)",
@@ -34,6 +35,7 @@ THEMES = [
         "live": "#99aabb", "card": "rgba(20,48,31,240)", "cardbd": "#22aa55",
         "cardtx": "#ddffee", "inbg": "rgba(14,14,18,235)", "intx": "#eee",
         "inbd": "#444", "btn": "rgba(42,42,51,240)", "btntx": "#eee",
+        "ins": "rgba(24,28,40,235)", "instx": "#cdd6f4",
     },
     {  # claro
         "root": "rgba(246,248,251,242)", "bar": "rgba(228,232,238,245)",
@@ -41,19 +43,20 @@ THEMES = [
         "live": "#446677", "card": "rgba(214,245,224,245)", "cardbd": "#33aa77",
         "cardtx": "#114433", "inbg": "rgba(255,255,255,242)", "intx": "#111",
         "inbd": "#bbbbcc", "btn": "rgba(220,224,230,245)", "btntx": "#222",
+        "ins": "rgba(225,232,245,245)", "instx": "#243047",
     },
-    {  # vidrio (transparente, tipo agua)
+    {  # vidrio
         "root": "rgba(30,34,44,90)", "bar": "rgba(40,44,56,120)",
         "text": "#f0f4ff", "sub": "#bbddff", "title": "#bbccdd",
         "live": "#ccddee", "card": "rgba(30,70,50,120)", "cardbd": "#55cc99",
         "cardtx": "#eeffff", "inbg": "rgba(20,24,32,120)", "intx": "#ffffff",
         "inbd": "rgba(180,200,230,90)", "btn": "rgba(60,66,80,140)", "btntx": "#eeeeff",
+        "ins": "rgba(40,46,62,120)", "instx": "#e6ecff",
     },
 ]
 THEME_NAMES = ["oscuro", "claro", "vidrio"]
-
-_NORMAL = QSize(420, 560)
-_EXPANDED = QSize(760, 860)
+_NORMAL = (420, 560)
+_EXPANDED = (760, 860)
 
 
 def _qss(t: dict) -> str:
@@ -62,6 +65,8 @@ def _qss(t: dict) -> str:
     #bar {{ background: {t['bar']}; }}
     QLabel#status {{ color: {t['sub']}; font-size: 11px; }}
     QLabel#title {{ color: {t['title']}; font-size: 11px; }}
+    QLabel#insight {{ background: {t['ins']}; color: {t['instx']}; padding: 6px 9px;
+                      font-size: 12px; border-bottom: 1px solid {t['cardbd']}; }}
     QTextEdit#transcript {{ background: transparent; color: {t['text']};
                             border: none; font-size: 13px; }}
     QLabel#live {{ color: {t['live']}; font-style: italic; padding: 2px 8px; }}
@@ -70,7 +75,8 @@ def _qss(t: dict) -> str:
     QLineEdit {{ background: {t['inbg']}; color: {t['intx']}; border: 1px solid {t['inbd']};
                  border-radius: 6px; padding: 6px; }}
     QPushButton {{ background: {t['btn']}; color: {t['btntx']}; border: none;
-                   border-radius: 5px; padding: 4px 9px; }}
+                   border-radius: 5px; padding: 4px 8px; font-size: 12px; }}
+    QPushButton:hover {{ background: {t['cardbd']}; }}
     """
 
 
@@ -86,50 +92,44 @@ class AssistantWidget(QWidget):
         self._apply_theme()
         self._connect_ws()
 
-    # ---------- UI ----------
     def _build_ui(self) -> None:
         self.setObjectName("root")
-        self.setWindowFlags(
-            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground, True)  # fondo translúcido
-        self.resize(_NORMAL)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.resize(*_NORMAL)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Barra superior (arrastrable) con controles
+        # Barra superior
         bar = QFrame()
         bar.setObjectName("bar")
         barl = QHBoxLayout(bar)
         barl.setContentsMargins(8, 5, 8, 5)
         self.status = QLabel("conectando…")
         self.status.setObjectName("status")
-        theme_btn = QPushButton("tema")
-        theme_btn.setToolTip("Cambiar tema (oscuro/claro/vidrio)")
-        theme_btn.clicked.connect(self._cycle_theme)
-        self.min_btn = QPushButton("–")
-        self.min_btn.setToolTip("Minimizar / restaurar")
-        self.min_btn.clicked.connect(self._toggle_min)
-        self.exp_btn = QPushButton("⤢")
-        self.exp_btn.setToolTip("Expandir / reducir")
-        self.exp_btn.clicked.connect(self._toggle_expand)
-        clear_btn = QPushButton("limpiar")
-        clear_btn.clicked.connect(self._clear)
-        close_btn = QPushButton("✕")
-        close_btn.clicked.connect(self.close)
         barl.addWidget(self.status)
         barl.addStretch(1)
-        for b in (theme_btn, clear_btn, self.min_btn, self.exp_btn, close_btn):
+        for label, slot in [("tema", self._cycle_theme), ("limpiar", self._clear),
+                            ("–", self._toggle_min), ("⤢", self._toggle_expand),
+                            ("✕", self.close)]:
+            b = QPushButton(label)
+            b.clicked.connect(slot)
             barl.addWidget(b)
         root.addWidget(bar)
 
-        # Cuerpo (todo lo que se oculta al minimizar)
+        # Cuerpo (se oculta al minimizar)
         self.body = QWidget()
         body = QVBoxLayout(self.body)
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
+
+        self.insight = QLabel("")
+        self.insight.setObjectName("insight")
+        self.insight.setWordWrap(True)
+        self.insight.setVisible(False)
+        body.addWidget(self.insight)
 
         self.transcript = QTextEdit()
         self.transcript.setObjectName("transcript")
@@ -146,6 +146,19 @@ class AssistantWidget(QWidget):
         self.suggestion.setWordWrap(True)
         body.addWidget(self.suggestion)
 
+        # Botones rápidos
+        quickrow = QFrame()
+        quickrow.setObjectName("bar")
+        ql = QHBoxLayout(quickrow)
+        ql.setContentsMargins(6, 4, 6, 4)
+        ql.setSpacing(4)
+        for label, prompt in QUICK_ACTIONS:
+            b = QPushButton(label)
+            b.clicked.connect(lambda _=False, p=prompt: self._quick(p))
+            ql.addWidget(b)
+        body.addWidget(quickrow)
+
+        # Caja para preguntar
         askrow = QFrame()
         askrow.setObjectName("bar")
         al = QHBoxLayout(askrow)
@@ -159,7 +172,6 @@ class AssistantWidget(QWidget):
         al.addWidget(send_btn)
         body.addWidget(askrow)
 
-        # Fila inferior con el agarre para redimensionar
         griprow = QHBoxLayout()
         griprow.setContentsMargins(0, 0, 2, 2)
         griprow.addStretch(1)
@@ -177,20 +189,20 @@ class AssistantWidget(QWidget):
 
     def _toggle_min(self) -> None:
         if self.body.isVisible():
-            self._restore_size = self.size()
+            self._restore_size = (self.width(), self.height())
             self.body.hide()
-            self.adjustSize()      # encoge a solo la barra
+            self.adjustSize()
         else:
             self.body.show()
-            self.resize(self._restore_size)
+            self.resize(*self._restore_size)
 
     def _toggle_expand(self) -> None:
-        if not self.body.isVisible():   # si estaba minimizado, primero restaura
+        if not self.body.isVisible():
             self.body.show()
         self._expanded = not self._expanded
-        self.resize(_EXPANDED if self._expanded else _NORMAL)
+        self.resize(*(_EXPANDED if self._expanded else _NORMAL))
 
-    # ---------- arrastre ----------
+    # arrastre
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.LeftButton:
             self._drag_off = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -204,7 +216,7 @@ class AssistantWidget(QWidget):
     def mouseReleaseEvent(self, e) -> None:
         self._drag_off = None
 
-    # ---------- WebSocket ----------
+    # WebSocket
     def _connect_ws(self) -> None:
         self.ws = QWebSocket()
         self.ws.connected.connect(lambda: self.status.setText("conectado"))
@@ -225,6 +237,16 @@ class AssistantWidget(QWidget):
             self.live.setText("")
         elif t == "suggestion":
             self.suggestion.setText("💡 " + m.get("text", ""))
+        elif t == "insight":
+            parts = []
+            if m.get("summary"):
+                parts.append("🧠 " + m["summary"])
+            if m.get("ideas"):
+                parts.append("💡 " + m["ideas"])
+            if m.get("alert"):
+                parts.append("📌 " + m["alert"])
+            self.insight.setText("\n".join(parts))
+            self.insight.setVisible(bool(parts))
         elif t == "status":
             detail = m.get("detail", "")
             self.status.setText(m.get("state", "") + (f" — {detail}" if detail else ""))
@@ -236,14 +258,14 @@ class AssistantWidget(QWidget):
         self.ws.sendTextMessage(json.dumps({"type": "ask", "text": text}))
         self.ask.clear()
 
+    def _quick(self, prompt: str) -> None:
+        self.ws.sendTextMessage(json.dumps({"type": "ask", "text": prompt}))
+
     def _clear(self) -> None:
         self.transcript.clear()
         self.live.setText("")
 
     def closeEvent(self, e) -> None:
-        # Cerrar la ventana (✕ o el gestor) debe terminar el loop de Qt para que
-        # open_widget() retorne y run.py mate el proceso. Sin esto, la ventana
-        # solo se ocultaba y el proceso quedaba vivo.
         try:
             self.ws.close()
         except Exception:
