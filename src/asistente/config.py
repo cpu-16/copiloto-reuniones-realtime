@@ -19,6 +19,7 @@ class AudioCfg(BaseModel):
 
 class WhisperCfg(BaseModel):
     model: str = "turbo"
+    realtime_model: str = "small"   # modelo ligero para parciales en vivo
     compute_type: str = "float16"
     language: str = "es"
 

@@ -16,7 +16,7 @@ from asistente.config import load_config
 from asistente.brain.claude_client import WarmClaude
 from asistente.capture.pipewire import PipeWireCapture
 from asistente.transcribe.whisper_stt import LiveTranscriber
-from asistente.events import TranscriptFinal
+from asistente.events import TranscriptFinal, TranscriptPartial
 from asistente.server.app import create_app
 from asistente.ui.launcher import open_window
 
@@ -30,19 +30,25 @@ def main() -> None:
     # Captura + transcripción en hilos; empuja transcript al broadcast del server.
     loop = asyncio.new_event_loop()
 
-    def on_final(text: str) -> None:
-        print("[transcript]", text)  # eco en terminal para diagnóstico
-        ev = TranscriptFinal(text=text, ts=0.0)
+    def _push(ev) -> None:
         fut = asyncio.run_coroutine_threadsafe(app.state.broadcast(ev), loop)
         try:
             fut.result(timeout=2)
         except Exception:
             pass
 
+    def on_final(text: str) -> None:
+        print("[final]", text)  # eco en terminal para diagnóstico
+        _push(TranscriptFinal(text=text, ts=0.0))
+
+    def on_partial(text: str) -> None:
+        _push(TranscriptPartial(text=text, ts=0.0))
+
     cap = PipeWireCapture(target=cfg.audio.target, rate=cfg.audio.sample_rate)
     trans = LiveTranscriber(
         model=cfg.whisper.model, language=cfg.whisper.language,
-        compute_type=cfg.whisper.compute_type, on_final=on_final,
+        compute_type=cfg.whisper.compute_type, realtime_model=cfg.whisper.realtime_model,
+        on_final=on_final, on_partial=on_partial,
     )
 
     def run_server() -> None:

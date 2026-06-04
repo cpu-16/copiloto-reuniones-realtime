@@ -1,5 +1,13 @@
-"""Transcriptor en vivo: alimenta PCM a RealtimeSTT (faster-whisper turbo) y
-entrega texto final por callback. Corre en su propio hilo."""
+"""Transcriptor en vivo: alimenta PCM a RealtimeSTT (faster-whisper) y entrega
+texto en tiempo real. Corre en sus propios hilos.
+
+Emite DOS señales:
+- on_partial: texto parcial continuo MIENTRAS se habla (modelo realtime ligero).
+- on_final:   frase estabilizada al detectar una pausa (modelo principal, más preciso).
+
+Los parciales son imprescindibles para audio de reunión continuo: casi nunca hay
+0.7s de silencio limpio que dispare un final, así que sin parciales no saldría nada.
+"""
 from __future__ import annotations
 
 import threading
@@ -11,8 +19,11 @@ from RealtimeSTT import AudioToTextRecorder
 class LiveTranscriber:
     def __init__(self, model: str = "turbo", language: str = "es",
                  compute_type: str = "float16",
-                 on_final: Callable[[str], None] | None = None) -> None:
+                 realtime_model: str = "small",
+                 on_final: Callable[[str], None] | None = None,
+                 on_partial: Callable[[str], None] | None = None) -> None:
         self.on_final = on_final or (lambda _t: None)
+        self.on_partial = on_partial or (lambda _t: None)
         self.recorder = AudioToTextRecorder(
             model=model,
             language=language,
@@ -21,8 +32,15 @@ class LiveTranscriber:
             use_microphone=False,        # nosotros alimentamos el audio
             spinner=False,
             post_speech_silence_duration=0.7,
+            enable_realtime_transcription=True,
+            realtime_model_type=realtime_model,
+            on_realtime_transcription_stabilized=self._on_realtime,
         )
         self._running = False
+
+    def _on_realtime(self, text: str) -> None:
+        if text:
+            self.on_partial(text)
 
     def feed(self, pcm_chunks: Iterator[bytes], sample_rate: int = 16000) -> None:
         """Bucle (en su propio hilo) que empuja PCM al recorder."""
