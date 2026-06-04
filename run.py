@@ -80,20 +80,34 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             _push(Status(state="error", detail=str(e)))
 
+    # Cooldown para no disparar la sugerencia muchas veces por la misma pregunta.
+    _sg = {"t": 0.0}
+
+    def maybe_suggest(text: str) -> None:
+        if not is_question_for_me(text, names):
+            return
+        now = time.monotonic()
+        if now - _sg["t"] < 8.0:   # como mucho una sugerencia cada 8s
+            return
+        _sg["t"] = now
+        print("  -> parece pregunta para ti; pidiendo sugerencia a Claude…")
+        threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
+
     def on_final(text: str) -> None:
         if is_hallucination(text):
             return
         print("[final]", text)  # eco en terminal para diagnóstico
         _push(TranscriptFinal(text=text, ts=0.0))
         ctx.append(text)
-        if is_question_for_me(text, names):
-            print("  -> parece pregunta para ti; pidiendo sugerencia a Claude…")
-            threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
+        maybe_suggest(text)
 
     def on_partial(text: str) -> None:
         if is_hallucination(text):
             return
         _push(TranscriptPartial(text=text, ts=0.0))
+        # También detectamos sobre el parcial: con audio continuo casi no hay
+        # finales, así que si esperáramos al final nunca saldría la sugerencia.
+        maybe_suggest(text)
 
     cap = PipeWireCapture(target=cfg.audio.target, rate=cfg.audio.sample_rate)
     trans = LiveTranscriber(
