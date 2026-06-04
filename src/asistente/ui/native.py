@@ -240,6 +240,19 @@ class AssistantWidget(QWidget):
         self.transcript.clear()
         self.live.setText("")
 
+    def closeEvent(self, e) -> None:
+        # Cerrar la ventana (✕ o el gestor) debe terminar el loop de Qt para que
+        # open_widget() retorne y run.py mate el proceso. Sin esto, la ventana
+        # solo se ocultaba y el proceso quedaba vivo.
+        try:
+            self.ws.close()
+        except Exception:
+            pass
+        e.accept()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
 
 def open_widget(ws_url: str) -> None:
     app = QApplication.instance() or QApplication([])
