@@ -45,7 +45,7 @@ THEMES = [
         "inbd": "#bbbbcc", "btn": "rgba(220,224,230,245)", "btntx": "#222",
         "ins": "rgba(225,232,245,245)", "instx": "#243047",
     },
-    {  # vidrio
+    {  # vidrio (muy transparente)
         "root": "rgba(30,34,44,90)", "bar": "rgba(40,44,56,120)",
         "text": "#f0f4ff", "sub": "#bbddff", "title": "#bbccdd",
         "live": "#ccddee", "card": "rgba(30,70,50,120)", "cardbd": "#55cc99",
@@ -53,8 +53,16 @@ THEMES = [
         "inbd": "rgba(180,200,230,90)", "btn": "rgba(60,66,80,140)", "btntx": "#eeeeff",
         "ins": "rgba(40,46,62,120)", "instx": "#e6ecff",
     },
+    {  # vidrio legible (semi-transparente pero con letras claras)
+        "root": "rgba(16,18,26,210)", "bar": "rgba(28,32,44,228)",
+        "text": "#f2f5ff", "sub": "#bfe3ff", "title": "#c2cfe0",
+        "live": "#aebccf", "card": "rgba(20,52,36,228)", "cardbd": "#44cc88",
+        "cardtx": "#ecfff5", "inbg": "rgba(12,14,20,220)", "intx": "#ffffff",
+        "inbd": "rgba(150,170,200,130)", "btn": "rgba(48,54,70,225)", "btntx": "#eef",
+        "ins": "rgba(24,28,42,220)", "instx": "#dde7ff",
+    },
 ]
-THEME_NAMES = ["oscuro", "claro", "vidrio"]
+THEME_NAMES = ["oscuro", "claro", "vidrio", "vidrio legible"]
 _NORMAL = (420, 560)
 _EXPANDED = (760, 860)
 
@@ -235,6 +243,8 @@ class AssistantWidget(QWidget):
         elif t == "transcript.final":
             self.transcript.append(m.get("text", ""))
             self.live.setText("")
+            sb = self.transcript.verticalScrollBar()   # auto-scroll a lo último
+            sb.setValue(sb.maximum())
         elif t == "suggestion":
             self.suggestion.setText("💡 " + m.get("text", ""))
         elif t == "insight":

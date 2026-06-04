@@ -88,6 +88,8 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
                         prompt = _ask_prompt(getattr(app.state, "ctx", None), cmd.text)
                         answer = await asyncio.to_thread(app.state.brain.ask, prompt)
                         await ws.send_text(Suggestion(text=answer, ready=True).model_dump_json())
+                        # Vuelve a "capturando" para no quedar pegado en "pensando".
+                        await ws.send_text(Status(state="capturando").model_dump_json())
                     except Exception as e:
                         await ws.send_text(
                             Status(state="error", detail=str(e)).model_dump_json()
