@@ -37,6 +37,8 @@ class ServerCfg(BaseModel):
 
 
 class Config(BaseModel):
+    # Motor de transcripción: "whisper" (.venv) o "parakeet" (.venv-parakeet, más liviano).
+    engine: str = "whisper"
     user: UserCfg = UserCfg()
     audio: AudioCfg = AudioCfg()
     whisper: WhisperCfg = WhisperCfg()

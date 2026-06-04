@@ -1,4 +1,9 @@
 # Copia a config.toml y ajusta
+# Motor de transcripción:
+#   "parakeet" = NVIDIA Parakeet TDT v3 (liviano ~1.3GB, rápido). Usa .venv-parakeet.
+#   "whisper"  = faster-whisper turbo (~2.9GB). Usa .venv.
+engine = "parakeet"
+
 [user]
 # Nombres con los que te llaman en reuniones (para detectar "¿me preguntan a mí?")
 names = ["Rafael", "Rafa"]

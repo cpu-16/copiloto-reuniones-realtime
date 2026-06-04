@@ -18,7 +18,6 @@ import uvicorn
 from asistente.config import load_config
 from asistente.brain.claude_client import WarmClaude
 from asistente.capture.pipewire import PipeWireCapture
-from asistente.transcribe.whisper_stt import LiveTranscriber
 from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status
 from asistente.detect import is_question_for_me
 from asistente.transcribe.clean import is_hallucination
@@ -110,12 +109,32 @@ def main() -> None:
         maybe_suggest(text)
 
     cap = PipeWireCapture(target=cfg.audio.target, rate=cfg.audio.sample_rate)
-    trans = LiveTranscriber(
-        model=cfg.whisper.model, language=cfg.whisper.language,
-        compute_type=cfg.whisper.compute_type, realtime_model=cfg.whisper.realtime_model,
-        realtime_pause=cfg.whisper.realtime_pause, enable_realtime=cfg.whisper.enable_realtime,
-        on_final=on_final, on_partial=on_partial,
-    )
+    if cfg.engine == "parakeet":
+        print("Motor de transcripción: Parakeet (NeMo). Cargando modelo (~40s)…")
+        try:
+            from asistente.transcribe.parakeet_stt import ParakeetTranscriber
+        except ImportError as e:
+            print(f"\n  ⚠  engine='parakeet' necesita el venv .venv-parakeet (NeMo): {e}")
+            print("     Corre:  .venv-parakeet/bin/python run.py --native\n")
+            sys.exit(1)
+        trans = ParakeetTranscriber(
+            realtime_pause=cfg.whisper.realtime_pause,
+            on_final=on_final, on_partial=on_partial,
+        )
+    else:
+        print("Motor de transcripción: Whisper (faster-whisper).")
+        try:
+            from asistente.transcribe.whisper_stt import LiveTranscriber
+        except ImportError as e:
+            print(f"\n  ⚠  engine='whisper' necesita el venv .venv (RealtimeSTT): {e}")
+            print("     Corre:  .venv/bin/python run.py --native\n")
+            sys.exit(1)
+        trans = LiveTranscriber(
+            model=cfg.whisper.model, language=cfg.whisper.language,
+            compute_type=cfg.whisper.compute_type, realtime_model=cfg.whisper.realtime_model,
+            realtime_pause=cfg.whisper.realtime_pause, enable_realtime=cfg.whisper.enable_realtime,
+            on_final=on_final, on_partial=on_partial,
+        )
 
     def run_server() -> None:
         asyncio.set_event_loop(loop)
