@@ -6,6 +6,7 @@ Requiere config.toml (copia de config.example.toml)."""
 from __future__ import annotations
 
 import asyncio
+import socket
 import sys
 import threading
 import time
@@ -19,12 +20,27 @@ from asistente.capture.pipewire import PipeWireCapture
 from asistente.transcribe.whisper_stt import LiveTranscriber
 from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status
 from asistente.detect import is_question_for_me
+from asistente.transcribe.clean import is_hallucination
 from asistente.server.app import create_app
 from asistente.ui.launcher import open_window
 
 
+def _port_free(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
 def main() -> None:
     cfg = load_config("config.toml")
+    if not _port_free(cfg.server.host, cfg.server.port):
+        print(f"\n  ⚠  Ya hay algo escuchando en {cfg.server.host}:{cfg.server.port}.")
+        print("     Seguramente otra instancia del asistente sigue corriendo.")
+        print("     Ciérrala primero:  pkill -f run.py   (o cierra su ventana)\n")
+        sys.exit(1)
     print("Iniciando cerebro Claude...")
     brain = WarmClaude(model=cfg.claude.model)
     app = create_app(cfg, brain=brain, start_audio=False)
@@ -61,6 +77,8 @@ def main() -> None:
             _push(Status(state="error", detail=str(e)))
 
     def on_final(text: str) -> None:
+        if is_hallucination(text):
+            return
         print("[final]", text)  # eco en terminal para diagnóstico
         _push(TranscriptFinal(text=text, ts=0.0))
         ctx.append(text)
@@ -69,6 +87,8 @@ def main() -> None:
             threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
 
     def on_partial(text: str) -> None:
+        if is_hallucination(text):
+            return
         _push(TranscriptPartial(text=text, ts=0.0))
 
     cap = PipeWireCapture(target=cfg.audio.target, rate=cfg.audio.sample_rate)
