@@ -5,7 +5,8 @@ QtWidgets es estable. Este widget se conecta al orquestador por WebSocket (QWebS
 y muestra: estado, transcripción en vivo (con línea de parcial), tarjeta de sugerencia
 y una caja para preguntarle a Claude. Es frameless, siempre-encima y arrastrable.
 
-Soporta 3 temas con el botón "tema": oscuro / claro / vidrio (transparente).
+Controles en la barra: tema (oscuro/claro/vidrio), minimizar (–), expandir (⤢), cerrar (✕).
+Esquina inferior derecha: agarre para redimensionar.
 """
 from __future__ import annotations
 
@@ -17,11 +18,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 import json  # noqa: E402
 
-from PySide6.QtCore import Qt, QUrl  # noqa: E402
+from PySide6.QtCore import Qt, QUrl, QSize  # noqa: E402
 from PySide6.QtWebSockets import QWebSocket  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
-    QLineEdit, QPushButton, QFrame,
+    QLineEdit, QPushButton, QFrame, QSizeGrip,
 )
 
 # Cada tema define colores (con alfa para transparencia). El fondo translúcido
@@ -51,6 +52,9 @@ THEMES = [
 ]
 THEME_NAMES = ["oscuro", "claro", "vidrio"]
 
+_NORMAL = QSize(420, 560)
+_EXPANDED = QSize(760, 860)
+
 
 def _qss(t: dict) -> str:
     return f"""
@@ -76,6 +80,8 @@ class AssistantWidget(QWidget):
         self._url = ws_url
         self._drag_off = None
         self._theme = 0
+        self._expanded = False
+        self._restore_size = _NORMAL
         self._build_ui()
         self._apply_theme()
         self._connect_ws()
@@ -86,14 +92,14 @@ class AssistantWidget(QWidget):
         self.setWindowFlags(
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         )
-        self.setAttribute(Qt.WA_TranslucentBackground, True)  # permite fondo translúcido
-        self.resize(420, 560)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)  # fondo translúcido
+        self.resize(_NORMAL)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Barra superior (arrastrable)
+        # Barra superior (arrastrable) con controles
         bar = QFrame()
         bar.setObjectName("bar")
         barl = QHBoxLayout(bar)
@@ -101,36 +107,45 @@ class AssistantWidget(QWidget):
         self.status = QLabel("conectando…")
         self.status.setObjectName("status")
         theme_btn = QPushButton("tema")
+        theme_btn.setToolTip("Cambiar tema (oscuro/claro/vidrio)")
         theme_btn.clicked.connect(self._cycle_theme)
+        self.min_btn = QPushButton("–")
+        self.min_btn.setToolTip("Minimizar / restaurar")
+        self.min_btn.clicked.connect(self._toggle_min)
+        self.exp_btn = QPushButton("⤢")
+        self.exp_btn.setToolTip("Expandir / reducir")
+        self.exp_btn.clicked.connect(self._toggle_expand)
         clear_btn = QPushButton("limpiar")
         clear_btn.clicked.connect(self._clear)
         close_btn = QPushButton("✕")
         close_btn.clicked.connect(self.close)
         barl.addWidget(self.status)
         barl.addStretch(1)
-        barl.addWidget(theme_btn)
-        barl.addWidget(clear_btn)
-        barl.addWidget(close_btn)
+        for b in (theme_btn, clear_btn, self.min_btn, self.exp_btn, close_btn):
+            barl.addWidget(b)
         root.addWidget(bar)
 
-        # Transcripción (finales) + línea viva (parcial)
+        # Cuerpo (todo lo que se oculta al minimizar)
+        self.body = QWidget()
+        body = QVBoxLayout(self.body)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+
         self.transcript = QTextEdit()
         self.transcript.setObjectName("transcript")
         self.transcript.setReadOnly(True)
-        root.addWidget(self.transcript, 1)
+        body.addWidget(self.transcript, 1)
 
         self.live = QLabel("")
         self.live.setObjectName("live")
         self.live.setWordWrap(True)
-        root.addWidget(self.live)
+        body.addWidget(self.live)
 
-        # Tarjeta de sugerencia
         self.suggestion = QLabel("💡 La respuesta sugerida aparecerá aquí.")
         self.suggestion.setObjectName("suggestion")
         self.suggestion.setWordWrap(True)
-        root.addWidget(self.suggestion)
+        body.addWidget(self.suggestion)
 
-        # Caja para preguntar
         askrow = QFrame()
         askrow.setObjectName("bar")
         al = QHBoxLayout(askrow)
@@ -142,7 +157,16 @@ class AssistantWidget(QWidget):
         send_btn.clicked.connect(self._send)
         al.addWidget(self.ask, 1)
         al.addWidget(send_btn)
-        root.addWidget(askrow)
+        body.addWidget(askrow)
+
+        # Fila inferior con el agarre para redimensionar
+        griprow = QHBoxLayout()
+        griprow.setContentsMargins(0, 0, 2, 2)
+        griprow.addStretch(1)
+        griprow.addWidget(QSizeGrip(self), 0, Qt.AlignRight | Qt.AlignBottom)
+        body.addLayout(griprow)
+
+        root.addWidget(self.body, 1)
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(_qss(THEMES[self._theme]))
@@ -150,6 +174,21 @@ class AssistantWidget(QWidget):
     def _cycle_theme(self) -> None:
         self._theme = (self._theme + 1) % len(THEMES)
         self._apply_theme()
+
+    def _toggle_min(self) -> None:
+        if self.body.isVisible():
+            self._restore_size = self.size()
+            self.body.hide()
+            self.adjustSize()      # encoge a solo la barra
+        else:
+            self.body.show()
+            self.resize(self._restore_size)
+
+    def _toggle_expand(self) -> None:
+        if not self.body.isVisible():   # si estaba minimizado, primero restaura
+            self.body.show()
+        self._expanded = not self._expanded
+        self.resize(_EXPANDED if self._expanded else _NORMAL)
 
     # ---------- arrastre ----------
     def mousePressEvent(self, e) -> None:

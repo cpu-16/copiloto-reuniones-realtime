@@ -6,6 +6,7 @@ Requiere config.toml (copia de config.example.toml)."""
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
 import sys
 import threading
@@ -136,9 +137,20 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        trans.stop()
-        cap.stop()
-        brain.stop()
+        # Cerrar la ventana (✕) debe matar TODO el proceso, sin tener que usar Ctrl+C.
+        # Limpiamos best-effort con timeout (RealtimeSTT puede colgarse al apagar) y
+        # luego forzamos la salida del proceso.
+        def _cleanup() -> None:
+            for fn in (trans.stop, cap.stop, brain.stop):
+                try:
+                    fn()
+                except Exception:
+                    pass
+        th = threading.Thread(target=_cleanup, daemon=True)
+        th.start()
+        th.join(timeout=3)
+        print("Cerrando…")
+        os._exit(0)
 
 
 if __name__ == "__main__":
