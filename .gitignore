@@ -7,3 +7,4 @@ config.toml
 models/
 *.egg-info/
 *.log
+.venv-parakeet/
