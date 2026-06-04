@@ -24,9 +24,11 @@ class LiveTranscriber:
                  on_partial: Callable[[str], None] | None = None) -> None:
         self.on_final = on_final or (lambda _t: None)
         self.on_partial = on_partial or (lambda _t: None)
+        # "" o "auto" => autodetección por Whisper (reuniones bilingües es/en).
+        lang = "" if language in ("", "auto", None) else language
         self.recorder = AudioToTextRecorder(
             model=model,
-            language=language,
+            language=lang,
             compute_type=compute_type,
             device="cuda",
             use_microphone=False,        # nosotros alimentamos el audio

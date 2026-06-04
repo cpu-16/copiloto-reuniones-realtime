@@ -13,8 +13,10 @@ sample_rate = 16000
 
 [whisper]
 model = "turbo"
+realtime_model = "small"   # modelo ligero para los parciales en vivo
 compute_type = "float16"
-language = "es"
+# "" = autodetecta idioma por frase (reuniones bilingües es/en). "es" lo fuerza.
+language = ""
 
 [claude]
 model = "haiku"

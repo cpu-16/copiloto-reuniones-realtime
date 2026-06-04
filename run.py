@@ -9,6 +9,7 @@ import asyncio
 import sys
 import threading
 import time
+from collections import deque
 
 import uvicorn
 
@@ -16,7 +17,8 @@ from asistente.config import load_config
 from asistente.brain.claude_client import WarmClaude
 from asistente.capture.pipewire import PipeWireCapture
 from asistente.transcribe.whisper_stt import LiveTranscriber
-from asistente.events import TranscriptFinal, TranscriptPartial
+from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status
+from asistente.detect import is_question_for_me
 from asistente.server.app import create_app
 from asistente.ui.launcher import open_window
 
@@ -37,9 +39,34 @@ def main() -> None:
         except Exception:
             pass
 
+    # Buffer rodante de contexto reciente para alimentar a Claude.
+    ctx = deque(maxlen=8)
+    names = cfg.user.names
+    yo = names[0] if names else "la persona"
+
+    def suggest_for(question: str) -> None:
+        """Genera una sugerencia con el contexto reciente (en su propio hilo)."""
+        contexto = "\n".join(ctx)
+        prompt = (
+            f"Contexto reciente de la reunión:\n{contexto}\n\n"
+            f"Acaban de preguntarle algo a {yo}: \"{question}\". "
+            f"Sugiere una respuesta breve y natural que {yo} podría decir."
+        )
+        try:
+            _push(Status(state="pensando"))
+            ans = brain.ask(prompt)
+            _push(Suggestion(text=ans, ready=True))
+            _push(Status(state="capturando"))
+        except Exception as e:  # noqa: BLE001
+            _push(Status(state="error", detail=str(e)))
+
     def on_final(text: str) -> None:
         print("[final]", text)  # eco en terminal para diagnóstico
         _push(TranscriptFinal(text=text, ts=0.0))
+        ctx.append(text)
+        if is_question_for_me(text, names):
+            print("  -> parece pregunta para ti; pidiendo sugerencia a Claude…")
+            threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
 
     def on_partial(text: str) -> None:
         _push(TranscriptPartial(text=text, ts=0.0))
@@ -70,14 +97,19 @@ def main() -> None:
     trans.start(cap.stream(), sample_rate=cfg.audio.sample_rate)
 
     url = f"http://{cfg.server.host}:{cfg.server.port}/?token={cfg.server.token}"
+    ws_url = f"ws://{cfg.server.host}:{cfg.server.port}/ws?token={cfg.server.token}"
     try:
         if "--no-window" in sys.argv:
             print(f"\n  Servidor listo. Abre esta URL en tu navegador:\n  {url}\n")
             print("  (Ctrl+C para detener)")
             threading.Event().wait()  # bloquea hasta Ctrl+C
+        elif "--native" in sys.argv:
+            print("Abriendo ventana NATIVA (PySide6)...")
+            from asistente.ui.native import open_widget
+            open_widget(ws_url)  # bloquea hasta cerrar la ventana
         else:
             print("Abriendo ventana:", url)
-            open_window(url)  # bloquea hasta cerrar la ventana
+            open_window(url)  # bloquea hasta cerrar la ventana (pywebview)
     except KeyboardInterrupt:
         pass
     finally:

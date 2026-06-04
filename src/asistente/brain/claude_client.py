@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from collections.abc import Callable
 
 DEFAULT_SYSTEM = (
@@ -49,38 +50,42 @@ class WarmClaude:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             text=True, bufsize=1,
         )
+        # Un solo proceso con un pipe: serializa llamadas concurrentes (pregunta
+        # manual + sugerencia proactiva) para no corromper el stream.
+        self._lock = threading.Lock()
 
     def ask(self, text: str, on_delta: Callable[[str], None] | None = None) -> str:
         if not (self.proc.stdin and self.proc.stdout):
             raise RuntimeError("El proceso de Claude no tiene stdin/stdout disponibles.")
-        self.proc.stdin.write(build_user_message(text) + "\n")
-        self.proc.stdin.flush()
-        chunks: list[str] = []
-        for line in self.proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            etype = ev.get("type")
-            if etype == "stream_event":
-                inner = ev.get("event", {})
-                if inner.get("type") == "content_block_delta":
-                    delta = inner.get("delta", {})
-                    if delta.get("type") == "text_delta":  # ignora thinking_delta
-                        piece = delta.get("text", "")
-                        chunks.append(piece)
-                        if on_delta:
-                            on_delta(piece)
-            elif etype == "result":
-                final = ev.get("result", "")
-                if final and not chunks:
-                    chunks.append(final)
-                break
-        if not chunks and self.proc.poll() is not None:
-            raise RuntimeError("El proceso de Claude terminó inesperadamente.")
+        with self._lock:
+            self.proc.stdin.write(build_user_message(text) + "\n")
+            self.proc.stdin.flush()
+            chunks: list[str] = []
+            for line in self.proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                etype = ev.get("type")
+                if etype == "stream_event":
+                    inner = ev.get("event", {})
+                    if inner.get("type") == "content_block_delta":
+                        delta = inner.get("delta", {})
+                        if delta.get("type") == "text_delta":  # ignora thinking_delta
+                            piece = delta.get("text", "")
+                            chunks.append(piece)
+                            if on_delta:
+                                on_delta(piece)
+                elif etype == "result":
+                    final = ev.get("result", "")
+                    if final and not chunks:
+                        chunks.append(final)
+                    break
+            if not chunks and self.proc.poll() is not None:
+                raise RuntimeError("El proceso de Claude terminó inesperadamente.")
         return "".join(chunks).strip()
 
     def prewarm(self) -> None:
