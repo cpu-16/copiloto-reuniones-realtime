@@ -19,7 +19,9 @@ class AudioCfg(BaseModel):
 
 class WhisperCfg(BaseModel):
     model: str = "turbo"
-    realtime_model: str = "small"   # modelo ligero para parciales en vivo
+    realtime_model: str = "small"   # modelo de los parciales (tiny<base<small)
+    realtime_pause: float = 0.2     # cada cuántos s re-transcribe (más alto = menos GPU)
+    enable_realtime: bool = True    # False = solo finales (mínima GPU, sin texto fluido)
     compute_type: str = "float16"
     language: str = "es"
 

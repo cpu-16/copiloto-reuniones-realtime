@@ -99,6 +99,7 @@ def main() -> None:
     trans = LiveTranscriber(
         model=cfg.whisper.model, language=cfg.whisper.language,
         compute_type=cfg.whisper.compute_type, realtime_model=cfg.whisper.realtime_model,
+        realtime_pause=cfg.whisper.realtime_pause, enable_realtime=cfg.whisper.enable_realtime,
         on_final=on_final, on_partial=on_partial,
     )
 

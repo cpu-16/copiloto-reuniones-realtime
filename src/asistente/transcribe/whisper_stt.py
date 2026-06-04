@@ -20,6 +20,8 @@ class LiveTranscriber:
     def __init__(self, model: str = "turbo", language: str = "es",
                  compute_type: str = "float16",
                  realtime_model: str = "small",
+                 realtime_pause: float = 0.2,
+                 enable_realtime: bool = True,
                  on_final: Callable[[str], None] | None = None,
                  on_partial: Callable[[str], None] | None = None) -> None:
         self.on_final = on_final or (lambda _t: None)
@@ -34,8 +36,12 @@ class LiveTranscriber:
             use_microphone=False,        # nosotros alimentamos el audio
             spinner=False,
             post_speech_silence_duration=0.7,
-            enable_realtime_transcription=True,
+            # Parciales en vivo: más pesados para la GPU (re-transcribe cada
+            # `realtime_pause` s). Subir la pausa o usar un modelo más chico baja
+            # el consumo; enable_realtime=False lo apaga (solo finales = mínima GPU).
+            enable_realtime_transcription=enable_realtime,
             realtime_model_type=realtime_model,
+            realtime_processing_pause=realtime_pause,
             on_realtime_transcription_stabilized=self._on_realtime,
         )
         self._running = False

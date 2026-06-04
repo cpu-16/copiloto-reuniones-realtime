@@ -13,7 +13,11 @@ sample_rate = 16000
 
 [whisper]
 model = "turbo"
-realtime_model = "small"   # modelo ligero para los parciales en vivo
+# Para BAJAR la GPU: realtime_model="tiny"/"base", sube realtime_pause, o
+# enable_realtime=false (solo finales, mínima GPU, sin texto fluido en vivo).
+realtime_model = "small"
+realtime_pause = 0.2
+enable_realtime = true
 compute_type = "float16"
 # "" = autodetecta idioma por frase (reuniones bilingües es/en). "es" lo fuerza.
 language = ""
