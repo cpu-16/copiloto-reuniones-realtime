@@ -56,7 +56,10 @@ def main() -> None:
             pass
 
     # Buffer rodante de contexto reciente para alimentar a Claude.
+    # Lo compartimos con el servidor para que el "preguntar" manual también
+    # use el contexto de la reunión, no solo el proactivo.
     ctx = deque(maxlen=8)
+    app.state.ctx = ctx
     names = cfg.user.names
     yo = names[0] if names else "la persona"
 

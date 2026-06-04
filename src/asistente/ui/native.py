@@ -4,6 +4,8 @@ QtWebEngine (el motor de navegador de pywebview) segfaultea en este Wayland, per
 QtWidgets es estable. Este widget se conecta al orquestador por WebSocket (QWebSocket)
 y muestra: estado, transcripción en vivo (con línea de parcial), tarjeta de sugerencia
 y una caja para preguntarle a Claude. Es frameless, siempre-encima y arrastrable.
+
+Soporta 3 temas con el botón "tema": oscuro / claro / vidrio (transparente).
 """
 from __future__ import annotations
 
@@ -22,23 +24,50 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLineEdit, QPushButton, QFrame,
 )
 
-_STYLE = """
-#root { background: #14141a; }
-#bar { background: #1b1b22; }
-QLabel#status { color: #8fd; font-size: 11px; }
-QLabel#title { color: #889; font-size: 11px; }
-QTextEdit#transcript { background: #14141a; color: #eee; border: none; font-size: 13px; }
-QLabel#live { color: #9ab; font-style: italic; padding: 2px 8px; }
-QLabel#suggestion { background: #14301f; color: #dfe; border-top: 1px solid #2a5;
-                    padding: 8px; font-size: 13px; }
-QLabel#suggestionEmpty { background: #181820; color: #678; border-top: 1px solid #333;
-                         padding: 8px; font-size: 13px; }
-QLineEdit { background: #0e0e12; color: #eee; border: 1px solid #444;
-            border-radius: 6px; padding: 6px; }
-QPushButton { background: #2a2a33; color: #eee; border: none; border-radius: 5px;
-              padding: 4px 10px; }
-QPushButton:hover { background: #3a3a45; }
-"""
+# Cada tema define colores (con alfa para transparencia). El fondo translúcido
+# funciona porque la ventana tiene WA_TranslucentBackground activado.
+THEMES = [
+    {  # oscuro
+        "root": "rgba(20,20,26,235)", "bar": "rgba(27,27,34,240)",
+        "text": "#eee", "sub": "#88ffdd", "title": "#8899aa",
+        "live": "#99aabb", "card": "rgba(20,48,31,240)", "cardbd": "#22aa55",
+        "cardtx": "#ddffee", "inbg": "rgba(14,14,18,235)", "intx": "#eee",
+        "inbd": "#444", "btn": "rgba(42,42,51,240)", "btntx": "#eee",
+    },
+    {  # claro
+        "root": "rgba(246,248,251,242)", "bar": "rgba(228,232,238,245)",
+        "text": "#1a1a22", "sub": "#00aa77", "title": "#556677",
+        "live": "#446677", "card": "rgba(214,245,224,245)", "cardbd": "#33aa77",
+        "cardtx": "#114433", "inbg": "rgba(255,255,255,242)", "intx": "#111",
+        "inbd": "#bbbbcc", "btn": "rgba(220,224,230,245)", "btntx": "#222",
+    },
+    {  # vidrio (transparente, tipo agua)
+        "root": "rgba(30,34,44,90)", "bar": "rgba(40,44,56,120)",
+        "text": "#f0f4ff", "sub": "#bbddff", "title": "#bbccdd",
+        "live": "#ccddee", "card": "rgba(30,70,50,120)", "cardbd": "#55cc99",
+        "cardtx": "#eeffff", "inbg": "rgba(20,24,32,120)", "intx": "#ffffff",
+        "inbd": "rgba(180,200,230,90)", "btn": "rgba(60,66,80,140)", "btntx": "#eeeeff",
+    },
+]
+THEME_NAMES = ["oscuro", "claro", "vidrio"]
+
+
+def _qss(t: dict) -> str:
+    return f"""
+    #root {{ background: {t['root']}; }}
+    #bar {{ background: {t['bar']}; }}
+    QLabel#status {{ color: {t['sub']}; font-size: 11px; }}
+    QLabel#title {{ color: {t['title']}; font-size: 11px; }}
+    QTextEdit#transcript {{ background: transparent; color: {t['text']};
+                            border: none; font-size: 13px; }}
+    QLabel#live {{ color: {t['live']}; font-style: italic; padding: 2px 8px; }}
+    QLabel#suggestion {{ background: {t['card']}; color: {t['cardtx']};
+                         border-top: 1px solid {t['cardbd']}; padding: 8px; font-size: 13px; }}
+    QLineEdit {{ background: {t['inbg']}; color: {t['intx']}; border: 1px solid {t['inbd']};
+                 border-radius: 6px; padding: 6px; }}
+    QPushButton {{ background: {t['btn']}; color: {t['btntx']}; border: none;
+                   border-radius: 5px; padding: 4px 9px; }}
+    """
 
 
 class AssistantWidget(QWidget):
@@ -46,8 +75,9 @@ class AssistantWidget(QWidget):
         super().__init__()
         self._url = ws_url
         self._drag_off = None
-        self._has_suggestion = False
+        self._theme = 0
         self._build_ui()
+        self._apply_theme()
         self._connect_ws()
 
     # ---------- UI ----------
@@ -56,7 +86,7 @@ class AssistantWidget(QWidget):
         self.setWindowFlags(
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         )
-        self.setStyleSheet(_STYLE)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)  # permite fondo translúcido
         self.resize(420, 560)
 
         root = QVBoxLayout(self)
@@ -70,15 +100,15 @@ class AssistantWidget(QWidget):
         barl.setContentsMargins(8, 5, 8, 5)
         self.status = QLabel("conectando…")
         self.status.setObjectName("status")
-        title = QLabel("Asistente")
-        title.setObjectName("title")
+        theme_btn = QPushButton("tema")
+        theme_btn.clicked.connect(self._cycle_theme)
         clear_btn = QPushButton("limpiar")
         clear_btn.clicked.connect(self._clear)
         close_btn = QPushButton("✕")
         close_btn.clicked.connect(self.close)
         barl.addWidget(self.status)
         barl.addStretch(1)
-        barl.addWidget(title)
+        barl.addWidget(theme_btn)
         barl.addWidget(clear_btn)
         barl.addWidget(close_btn)
         root.addWidget(bar)
@@ -96,7 +126,7 @@ class AssistantWidget(QWidget):
 
         # Tarjeta de sugerencia
         self.suggestion = QLabel("💡 La respuesta sugerida aparecerá aquí.")
-        self.suggestion.setObjectName("suggestionEmpty")
+        self.suggestion.setObjectName("suggestion")
         self.suggestion.setWordWrap(True)
         root.addWidget(self.suggestion)
 
@@ -113,6 +143,13 @@ class AssistantWidget(QWidget):
         al.addWidget(self.ask, 1)
         al.addWidget(send_btn)
         root.addWidget(askrow)
+
+    def _apply_theme(self) -> None:
+        self.setStyleSheet(_qss(THEMES[self._theme]))
+
+    def _cycle_theme(self) -> None:
+        self._theme = (self._theme + 1) % len(THEMES)
+        self._apply_theme()
 
     # ---------- arrastre ----------
     def mousePressEvent(self, e) -> None:
@@ -148,8 +185,6 @@ class AssistantWidget(QWidget):
             self.transcript.append(m.get("text", ""))
             self.live.setText("")
         elif t == "suggestion":
-            self.suggestion.setObjectName("suggestion")
-            self.suggestion.setStyleSheet(_STYLE)  # re-aplica para el nuevo objectName
             self.suggestion.setText("💡 " + m.get("text", ""))
         elif t == "status":
             detail = m.get("detail", "")

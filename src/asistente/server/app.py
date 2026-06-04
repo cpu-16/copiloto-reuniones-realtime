@@ -15,6 +15,18 @@ from asistente.events import Status, Suggestion, parse_client_event, AskCommand
 WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
 
 
+def _ask_prompt(ctx, question: str) -> str:
+    """Arma el prompt de una pregunta manual incluyendo el contexto reciente."""
+    contexto = "\n".join(ctx) if ctx else ""
+    if not contexto:
+        return question
+    return (
+        f"Contexto reciente de la reunión:\n{contexto}\n\n"
+        f"Pregunta del usuario: {question}\n\n"
+        f"Responde de forma breve y útil en español."
+    )
+
+
 def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
     # `start_audio` se conserva por estabilidad de firma; run.py (Task 13) arranca el pipeline.
     _ = start_audio
@@ -64,7 +76,8 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
                 if isinstance(cmd, AskCommand) and app.state.brain:
                     await ws.send_text(Status(state="pensando").model_dump_json())
                     try:
-                        answer = await asyncio.to_thread(app.state.brain.ask, cmd.text)
+                        prompt = _ask_prompt(getattr(app.state, "ctx", None), cmd.text)
+                        answer = await asyncio.to_thread(app.state.brain.ask, prompt)
                         await ws.send_text(Suggestion(text=answer, ready=True).model_dump_json())
                     except Exception as e:
                         await ws.send_text(
