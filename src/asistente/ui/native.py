@@ -247,6 +247,13 @@ class AssistantWidget(QWidget):
                 parts.append("📌 " + m["alert"])
             self.insight.setText("\n".join(parts))
             self.insight.setVisible(bool(parts))
+        elif t == "toggle":
+            if self.isVisible():
+                self.hide()
+            else:
+                self.show()
+                self.raise_()
+                self.activateWindow()
         elif t == "status":
             detail = m.get("detail", "")
             self.status.setText(m.get("state", "") + (f" — {detail}" if detail else ""))

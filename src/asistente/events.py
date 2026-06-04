@@ -36,6 +36,11 @@ class Insight(BaseModel):
     alert: str = ""       # decisión o tarea detectada (vacío si no hay)
 
 
+class Toggle(BaseModel):
+    """Pide a la UI alternar visibilidad (atajo global mostrar/ocultar)."""
+    type: Literal["toggle"] = "toggle"
+
+
 class Status(BaseModel):
     type: Literal["status"] = "status"
     state: str           # "capturando", "pensando", "error", ...

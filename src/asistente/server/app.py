@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from asistente.config import Config
-from asistente.events import Status, Suggestion, parse_client_event, AskCommand
+from asistente.events import Status, Suggestion, Toggle, parse_client_event, AskCommand
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
 
@@ -59,6 +59,15 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
             app.state.clients.discard(ws)
 
     app.state.broadcast = broadcast
+
+    @app.get("/toggle")
+    async def toggle(token: str = ""):
+        """Atajo global: alterna la visibilidad de la ventana (vía un atajo de GNOME
+        que hace curl a esta ruta). Difunde un evento toggle a las UIs conectadas."""
+        if token != cfg.server.token:
+            return {"ok": False}
+        await broadcast(Toggle())
+        return {"ok": True}
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):
