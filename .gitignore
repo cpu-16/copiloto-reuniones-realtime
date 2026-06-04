@@ -8,3 +8,4 @@ models/
 *.egg-info/
 *.log
 .venv-parakeet/
+.venv-qwen/
