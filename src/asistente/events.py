@@ -28,6 +28,16 @@ class Suggestion(BaseModel):
     ready: bool = False  # True cuando se detectó pregunta directa (Fase 2)
 
 
+class Answer(BaseModel):
+    """Respuesta a pedido (botones/cuadro). Va al panel lateral persistente, no a la
+    tarjeta de sugerencia proactiva (que el copiloto sobrescribe). `tab` enruta a la
+    pestaña: ideas|resumen|pregunto|respondo|libre."""
+    type: Literal["answer"] = "answer"
+    tab: str = "libre"
+    text: str
+    ready: bool = True
+
+
 class Insight(BaseModel):
     """Copiloto continuo: lo que la IA infiere del contexto en tiempo real."""
     type: Literal["insight"] = "insight"
@@ -50,13 +60,21 @@ class Status(BaseModel):
 class AskCommand(BaseModel):
     type: Literal["ask"] = "ask"
     text: str
+    tab: str = ""  # pestaña destino del panel (vacío = "libre"); el server enruta la Answer
 
 
 class ClearCommand(BaseModel):
     type: Literal["clear"] = "clear"
 
 
-ClientEvent = Union[AskCommand, ClearCommand]
+class CaptureCommand(BaseModel):
+    """Pausa/reanuda la captura. paused=True descarta parciales/finales (no transcribe,
+    no entra al contexto, no va a Claude); pw-record y el transcriptor siguen vivos."""
+    type: Literal["capture"] = "capture"
+    paused: bool
+
+
+ClientEvent = Union[AskCommand, ClearCommand, CaptureCommand]
 
 
 def parse_client_event(raw: str) -> ClientEvent:
@@ -67,4 +85,6 @@ def parse_client_event(raw: str) -> ClientEvent:
         return AskCommand(**data)
     if kind == "clear":
         return ClearCommand(**data)
+    if kind == "capture":
+        return CaptureCommand(**data)
     raise ValueError(f"Evento de cliente desconocido: {kind!r}")

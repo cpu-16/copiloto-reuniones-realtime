@@ -118,6 +118,8 @@ def main() -> None:
         threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
 
     def on_final(text: str) -> None:
+        if app.state.paused.is_set():   # captura pausada: descarta todo
+            return
         if is_hallucination(text):
             return
         print("[final]", text)  # eco en terminal para diagnóstico
@@ -126,6 +128,8 @@ def main() -> None:
         maybe_suggest(text)
 
     def on_partial(text: str) -> None:
+        if app.state.paused.is_set():   # captura pausada: descarta todo
+            return
         if is_hallucination(text):
             return
         _push(TranscriptPartial(text=text, ts=0.0))

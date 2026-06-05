@@ -35,3 +35,34 @@ def test_ws_acepta_token_bueno():
         msg = ws.receive_json()
         assert msg["type"] == "status"
         assert msg["state"] == "capturando"
+
+
+class _FakeBrain:
+    def ask(self, prompt):
+        return "respuesta-fake"
+
+
+def test_ws_ask_responde_answer_con_tab():
+    cfg = Config()
+    app = create_app(cfg, brain=_FakeBrain(), start_audio=False)
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws?token={cfg.server.token}") as ws:
+        ws.receive_json()  # status capturando inicial
+        ws.send_json({"type": "ask", "text": "dame ideas", "tab": "ideas"})
+        msgs = [ws.receive_json() for _ in range(3)]  # pensando, answer, capturando
+    ans = next(m for m in msgs if m["type"] == "answer")
+    assert ans["tab"] == "ideas"
+    assert ans["text"] == "respuesta-fake"
+
+
+def test_ws_capture_pausa_y_difunde_status():
+    cfg = Config()
+    app = create_app(cfg, brain=None, start_audio=False)
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws?token={cfg.server.token}") as ws:
+        ws.receive_json()  # capturando
+        ws.send_json({"type": "capture", "paused": True})
+        msg = ws.receive_json()
+        assert msg["type"] == "status"
+        assert msg["state"] == "pausado"
+    assert app.state.paused.is_set()

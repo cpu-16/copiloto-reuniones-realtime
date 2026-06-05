@@ -3,6 +3,7 @@ el pipeline captura->transcripción. El cerebro (Claude) atiende 'ask' a demanda
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -10,7 +11,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from asistente.config import Config
-from asistente.events import Status, Suggestion, Toggle, parse_client_event, AskCommand
+from asistente.events import (
+    Status, Suggestion, Answer, Toggle, parse_client_event,
+    AskCommand, CaptureCommand,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
 
@@ -34,6 +38,9 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
     app.state.cfg = cfg
     app.state.brain = brain
     app.state.clients: set[WebSocket] = set()
+    # Pausa de captura: si está seteado, run.py descarta parciales/finales (no transcribe,
+    # no entra al contexto, no va a Claude). pw-record y el transcriptor siguen vivos.
+    app.state.paused = threading.Event()
 
     @app.get("/health")
     async def health():
@@ -82,14 +89,27 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
             while True:
                 raw = await ws.receive_text()
                 cmd = parse_client_event(raw)
-                if isinstance(cmd, AskCommand) and app.state.brain:
+                if isinstance(cmd, CaptureCommand):
+                    # Pausa/reanuda; difunde el estado a TODAS las UIs para sincronizar.
+                    if cmd.paused:
+                        app.state.paused.set()
+                    else:
+                        app.state.paused.clear()
+                    await broadcast(Status(state="pausado" if cmd.paused else "capturando"))
+                elif isinstance(cmd, AskCommand) and app.state.brain:
+                    paused = app.state.paused.is_set()
                     await ws.send_text(Status(state="pensando").model_dump_json())
                     try:
                         prompt = _ask_prompt(getattr(app.state, "ctx", None), cmd.text)
                         answer = await asyncio.to_thread(app.state.brain.ask, prompt)
-                        await ws.send_text(Suggestion(text=answer, ready=True).model_dump_json())
-                        # Vuelve a "capturando" para no quedar pegado en "pensando".
-                        await ws.send_text(Status(state="capturando").model_dump_json())
+                        # Respuesta a pedido → panel lateral (Answer), no la tarjeta proactiva.
+                        await ws.send_text(
+                            Answer(tab=cmd.tab or "libre", text=answer).model_dump_json()
+                        )
+                        # Si está pausado no piso el estado "pausado"; si no, vuelvo a capturar.
+                        await ws.send_text(
+                            Status(state="pausado" if paused else "capturando").model_dump_json()
+                        )
                     except Exception as e:
                         await ws.send_text(
                             Status(state="error", detail=str(e)).model_dump_json()
