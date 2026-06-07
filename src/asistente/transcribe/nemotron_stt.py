@@ -15,7 +15,6 @@ verificado contra el NeMo instalado.
 """
 from __future__ import annotations
 
-import copy
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -53,7 +52,6 @@ class NemotronTranscriber:
         self.sample_rate = 16000
 
         import torch
-        from omegaconf import OmegaConf
         from nemo.collections.asr.models import ASRModel
         self._torch = torch
 
@@ -72,16 +70,9 @@ class NemotronTranscriber:
               f"shift={self._scfg.shift_size} pre_cache={self._scfg.pre_encode_cache_size} "
               f"drop={self._scfg.drop_extra_pre_encoded} lang={self.target_lang}")
 
-        # Preprocessor con normalización desactivada (la hacemos por chunk con
-        # normalize_batch, como en streaming_utils de NeMo).
-        pre_cfg = copy.deepcopy(self.model._cfg.preprocessor)
-        self._normalization = pre_cfg.normalize
-        OmegaConf.set_struct(pre_cfg, False)
-        pre_cfg.dither = 0.0
-        pre_cfg.pad_to = 0
-        pre_cfg.normalize = "None"
-        self._preprocessor = self.model.from_config_dict(pre_cfg).to(self._device).eval()
-
+        # El preprocesado y la normalización por chunk los hace CacheAwareStreamingAudioBuffer
+        # (en _worker): preprocesa el audio UNA vez y corta los chunks de features, evitando
+        # los artefactos de borde de re-preprocesar ventanas sueltas (que "comía" palabras).
         window_stride = float(self.model.cfg.preprocessor.window_stride)
         self._hop = round(self.sample_rate * window_stride)   # muestras por frame (~160)
 
@@ -141,82 +132,87 @@ class NemotronTranscriber:
     # ---- loop de streaming ----
     def _worker(self) -> None:
         torch = self._torch
-        from nemo.collections.asr.parts.preprocessing.features import normalize_batch
+        from nemo.collections.asr.parts.utils.streaming_utils import (
+            CacheAwareStreamingAudioBuffer,
+        )
 
+        # El buffer preprocesa el audio UNA vez y corta los chunks de features ya
+        # normalizados (online_normalization=True), con el pre-encode cache correcto.
+        # pad_and_drop_preencoded=False respeta el primer chunk especial.
+        buf = CacheAwareStreamingAudioBuffer(
+            model=self.model, online_normalization=True, pad_and_drop_preencoded=False,
+        )
         cache_ch, cache_t, cache_len = self.model.encoder.get_initial_cache_state(
             batch_size=1, dtype=torch.float32, device=self._device, max_dim=0
         )
         previous_hypotheses = None
         pred_out_stream = None
-        pcm_history = np.empty(0, dtype=np.float32)
+        stream_id: int | None = None
         emitted = 0          # chars ya finalizados de la transcripción acumulada
         last_growth = time.monotonic()
         last_full = ""
-        step = 0
+        model_step = 0
 
         while self._running:
-            first = step == 0
-            chunk_frames = _select(self._scfg.chunk_size, first)
-            shift_frames = _select(self._scfg.shift_size, first)
-            pre_cache_frames = _select(self._scfg.pre_encode_cache_size, first)
-            drop_extra = 0 if first else self._scfg.drop_extra_pre_encoded
-
-            new_frames = chunk_frames if first else shift_frames
-            new_pcm = self._read_samples(new_frames * self._hop)
+            # Leemos ~un chunk de audio y lo agregamos al buffer (preprocesado una vez).
+            read_frames = _select(self._scfg.chunk_size, model_step == 0)
+            new_pcm = self._read_samples(read_frames * self._hop)
             if new_pcm is None:
                 break
-            pcm_history = np.concatenate((pcm_history, new_pcm))
+            if stream_id is None:
+                buf.append_audio(new_pcm, stream_id=-1)
+                stream_id = 0
+            else:
+                buf.append_audio(new_pcm, stream_id=stream_id)
 
-            wanted_frames = pre_cache_frames + chunk_frames
-            wanted_samples = wanted_frames * self._hop
-            window = pcm_history[-wanted_samples:]
-            if window.size < wanted_samples:
-                window = np.pad(window, (wanted_samples - window.size, 0))
-            # No dejes crecer el historial sin límite.
-            if pcm_history.size > wanted_samples * 4:
-                pcm_history = pcm_history[-wanted_samples * 2:]
+            # Consumimos SOLO los chunks de features COMPLETOS disponibles. El guard es
+            # clave: el __iter__ del buffer no valida tamaño y, con un chunk incompleto,
+            # avanzaría buffer_idx de más y SE COMERÍA audio.
+            while self._running:
+                required = int(_select(self._scfg.chunk_size, buf.buffer_idx == 0))
+                available = int(buf.streams_length[0].item()) - buf.buffer_idx
+                if available < required:
+                    break
+                try:
+                    proc, proc_len = next(iter(buf))   # buffer_idx avanza += shift_size
+                except StopIteration:
+                    break
 
-            input_signal = torch.from_numpy(window).unsqueeze(0).to(self._device)
-            input_length = torch.tensor([window.size], device=self._device, dtype=torch.long)
-            with torch.inference_mode():   # fp32 puro: sin autocast (evita mezclar dtypes)
-                proc, _proc_len = self._preprocessor(input_signal=input_signal, length=input_length)
-                proc = proc[..., -wanted_frames:]
-                proc_len = torch.tensor([proc.shape[-1]], device=self._device, dtype=torch.long)
-                proc, _, _ = normalize_batch(x=proc, seq_len=proc_len,
-                                             normalize_type=self._normalization)
-                (
-                    pred_out_stream, _hyps, cache_ch, cache_t, cache_len, best_hyps,
-                ) = self.model.conformer_stream_step(
-                    processed_signal=proc,
-                    processed_signal_length=proc_len,
-                    cache_last_channel=cache_ch,
-                    cache_last_time=cache_t,
-                    cache_last_channel_len=cache_len,
-                    keep_all_outputs=False,
-                    previous_hypotheses=previous_hypotheses,
-                    previous_pred_out=pred_out_stream,
-                    drop_extra_pre_encoded=drop_extra,
-                    return_transcription=True,
-                )
-            previous_hypotheses = best_hyps
-            step += 1
+                drop_extra = 0 if model_step == 0 else int(self._scfg.drop_extra_pre_encoded)
+                with torch.inference_mode():   # fp32 puro (evita mezclar dtypes)
+                    (
+                        pred_out_stream, _hyps, cache_ch, cache_t, cache_len, best_hyps,
+                    ) = self.model.conformer_stream_step(
+                        processed_signal=proc,
+                        processed_signal_length=proc_len,
+                        cache_last_channel=cache_ch,
+                        cache_last_time=cache_t,
+                        cache_last_channel_len=cache_len,
+                        keep_all_outputs=False,   # live: el buffer vacío no es fin-de-stream
+                        previous_hypotheses=previous_hypotheses,
+                        previous_pred_out=pred_out_stream,
+                        drop_extra_pre_encoded=drop_extra,
+                        return_transcription=True,
+                    )
+                previous_hypotheses = best_hyps
+                model_step += 1
 
-            # strip_lang_tags quita las etiquetas <es-US>/<en-US> que emite el modo auto.
-            full = strip_lang_tags(best_hyps[0].text) if best_hyps else ""
-            now = time.monotonic()
-            if full != last_full:
-                last_full = full
-                last_growth = now
+                # strip_lang_tags quita las etiquetas <es-US>/<en-US> del modo auto.
+                full = strip_lang_tags(best_hyps[0].text) if best_hyps else ""
+                now = time.monotonic()
+                if full != last_full:
+                    last_full = full
+                    last_growth = now
 
-            finals, emitted, partial = segment_finals(full, emitted)
-            for f in finals:
-                self._emit_final(f)
-            if partial:
-                self.on_partial(partial)
-            # Pausa: si el texto no crece y hay parcial pendiente, ciérralo como final.
-            elif full[emitted:].strip() and (now - last_growth) >= self.pause_finalize_s:
-                self._emit_final(full[emitted:].strip())
-                emitted = len(full)
+                finals, emitted, partial = segment_finals(full, emitted)
+                for f in finals:
+                    self._emit_final(f)
+                if partial:
+                    self.on_partial(partial)
+                # Pausa: si no crece y hay parcial pendiente, ciérralo como final.
+                elif full[emitted:].strip() and (now - last_growth) >= self.pause_finalize_s:
+                    self._emit_final(full[emitted:].strip())
+                    emitted = len(full)
 
     def _emit_final(self, text: str) -> None:
         if self.correct_enabled and self.glossary:
