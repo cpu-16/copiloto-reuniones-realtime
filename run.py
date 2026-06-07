@@ -39,6 +39,13 @@ def _port_free(host: str, port: int) -> bool:
 
 def main() -> None:
     cfg = load_config("config.toml")
+    # Override del motor por la línea de comandos: `--engine nemotron|parakeet|whisper`.
+    # OJO: hay que correr con el venv que corresponde al motor (.venv-nemotron, etc.).
+    if "--engine" in sys.argv:
+        i = sys.argv.index("--engine")
+        if i + 1 < len(sys.argv):
+            cfg.engine = sys.argv[i + 1]
+            print(f"Motor forzado por --engine: {cfg.engine}")
     if not _port_free(cfg.server.host, cfg.server.port):
         print(f"\n  ⚠  Ya hay algo escuchando en {cfg.server.host}:{cfg.server.port}.")
         print("     Seguramente otra instancia del asistente sigue corriendo.")
