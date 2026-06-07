@@ -40,12 +40,16 @@ class NemotronTranscriber:
                  glossary: list[str] | None = None,
                  correct_enabled: bool = True,
                  pause_finalize_s: float = 0.8,
+                 max_partial_chars: int = 220,
                  on_final: Callable[[str], None] | None = None,
                  on_partial: Callable[[str], None] | None = None) -> None:
         self.on_final = on_final or (lambda _t: None)
         self.on_partial = on_partial or (lambda _t: None)
         self.att_context_size = att_context_size or [56, 13]   # 1120ms: mejor precisión
         self.target_lang = target_lang
+        # Tope del parcial sin cerrar: si el habla es muy corrida (sin puntuación), se
+        # fuerza un final y se reinicia la hipótesis para que no crezca sin límite.
+        self.max_partial_chars = max_partial_chars
         self.glossary = glossary or []
         self.correct_enabled = correct_enabled
         self.pause_finalize_s = pause_finalize_s
@@ -207,12 +211,27 @@ class NemotronTranscriber:
                 finals, emitted, partial = segment_finals(full, emitted)
                 for f in finals:
                     self._emit_final(f)
-                if partial:
-                    self.on_partial(partial)
-                # Pausa: si no crece y hay parcial pendiente, ciérralo como final.
-                elif full[emitted:].strip() and (now - last_growth) >= self.pause_finalize_s:
-                    self._emit_final(full[emitted:].strip())
+                pending = full[emitted:]
+                # Forzar final si: pausa (dejó de crecer) o el parcial es muy largo (habla
+                # corrida sin puntuación). Si no, mostrarlo como parcial.
+                force = (now - last_growth) >= self.pause_finalize_s or \
+                        len(pending) >= self.max_partial_chars
+                if pending.strip() and force:
+                    self._emit_final(pending.strip())
                     emitted = len(full)
+                elif pending.strip():
+                    self.on_partial(pending)
+
+                # Reinicia la hipótesis del decoder cuando ya no queda nada pendiente: así
+                # el texto acumulado del RNN-T no crece sin límite y la sesión no se
+                # ralentiza. El cache acústico del encoder SE MANTIENE (no se pierde nada,
+                # ya emitimos todo lo pendiente antes de resetear).
+                if full and emitted >= len(full):
+                    previous_hypotheses = None
+                    pred_out_stream = None
+                    emitted = 0
+                    last_full = ""
+                    last_growth = now
 
     def _emit_final(self, text: str) -> None:
         if self.correct_enabled and self.glossary:

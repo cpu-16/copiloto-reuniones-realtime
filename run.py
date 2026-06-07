@@ -121,18 +121,26 @@ def main() -> None:
                 except Exception as e:  # noqa: BLE001
                     print("  resumen:", e)
 
-    # Cooldown para no disparar la sugerencia muchas veces por la misma pregunta.
-    _sg = {"t": 0.0}
+    # Cooldown + guard de "en vuelo": no apilar peticiones a Claude (con audio continuo
+    # la detección dispara seguido; si Claude tarda, los hilos se acumularían).
+    _sg = {"t": 0.0, "busy": False}
+
+    def _run_suggest(text: str) -> None:
+        try:
+            suggest_for(text)
+        finally:
+            _sg["busy"] = False
 
     def maybe_suggest(text: str) -> None:
         if not is_question_for_me(text, names):
             return
         now = time.monotonic()
-        if now - _sg["t"] < 8.0:   # como mucho una sugerencia cada 8s
+        if _sg["busy"] or now - _sg["t"] < 8.0:   # una a la vez, máx cada 8s
             return
         _sg["t"] = now
+        _sg["busy"] = True
         print("  -> parece pregunta para ti; pidiendo sugerencia a Claude…")
-        threading.Thread(target=suggest_for, args=(text,), daemon=True).start()
+        threading.Thread(target=_run_suggest, args=(text,), daemon=True).start()
 
     def on_final(text: str) -> None:
         if app.state.paused.is_set():   # captura pausada: descarta todo
