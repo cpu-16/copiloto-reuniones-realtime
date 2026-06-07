@@ -57,10 +57,13 @@ class NemotronTranscriber:
         self._torch = torch
 
         self._device = torch.device("cuda:0")
-        # Carga OOM-safe: CPU -> fp16 -> cuda (evita el pico fp32 en GPU).
+        # fp32 en GPU: el decoder RNN-T con CUDA graphs mezcla mal fp16/fp32 ("mat1 and
+        # mat2 must have the same dtype"). Un 0.6B en fp32 (~2.4GB) cabe de sobra; se
+        # puede optimizar a fp16 más adelante si hiciera falta.
         model = ASRModel.from_pretrained(model_name, map_location="cpu")
-        self.model = model.half().to(self._device).eval()
+        self.model = model.to(self._device).eval()
         self._maybe_set_language()
+        self._disable_cuda_graphs()
         # set_default_att_context_size invoca setup_streaming_params() internamente.
         self.model.encoder.set_default_att_context_size(self.att_context_size)
         self._scfg = self.model.encoder.streaming_cfg
@@ -81,6 +84,21 @@ class NemotronTranscriber:
         self._pcm = bytearray()
         self._lock = threading.Lock()
         self._running = False
+
+    def _disable_cuda_graphs(self) -> None:
+        """Desactiva el decoder con CUDA graphs: en streaming los chunks cambian de
+        tamaño (primer paso vs resto) y los graphs asumen forma fija. No es fatal si la
+        estructura del config difiere."""
+        try:
+            import copy as _copy
+            from omegaconf import open_dict
+            dec = _copy.deepcopy(self.model.cfg.decoding)
+            with open_dict(dec):
+                if "greedy" in dec:
+                    dec.greedy.use_cuda_graph_decoder = False
+            self.model.change_decoding_strategy(dec)
+        except Exception as e:  # noqa: BLE001
+            print("  [nemotron] aviso: no pude desactivar CUDA graphs:", e)
 
     def _maybe_set_language(self) -> None:
         """Best-effort: fija el idioma de transcripción si el modelo lo soporta. El API
@@ -121,7 +139,7 @@ class NemotronTranscriber:
         from nemo.collections.asr.parts.preprocessing.features import normalize_batch
 
         cache_ch, cache_t, cache_len = self.model.encoder.get_initial_cache_state(
-            batch_size=1, dtype=torch.float16, device=self._device, max_dim=0
+            batch_size=1, dtype=torch.float32, device=self._device, max_dim=0
         )
         previous_hypotheses = None
         pred_out_stream = None
@@ -155,7 +173,7 @@ class NemotronTranscriber:
 
             input_signal = torch.from_numpy(window).unsqueeze(0).to(self._device)
             input_length = torch.tensor([window.size], device=self._device, dtype=torch.long)
-            with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+            with torch.inference_mode():   # fp32 puro: sin autocast (evita mezclar dtypes)
                 proc, _proc_len = self._preprocessor(input_signal=input_signal, length=input_length)
                 proc = proc[..., -wanted_frames:]
                 proc_len = torch.tensor([proc.shape[-1]], device=self._device, dtype=torch.long)
