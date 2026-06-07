@@ -1,7 +1,14 @@
 # Diseño — Mejoras: captura, historial, contexto y precisión ASR
 
 Fecha: 2026-06-07
-Estado: propuesto (pendiente de revisión del usuario)
+Estado: **implementado** (Fases A, B y C en código; la validación GPU de C la corre el usuario con `scripts/derisk_nemotron.py`)
+
+## Estado de implementación
+
+- **Fase A1** ✅ — `[parakeet] silence_rms`/`auto_calibrate`, autocalibración del piso de ruido (`calibrate_threshold`). Tests.
+- **Fase A2** ✅ — panel acumula historial (`ui/history.py`), "pensando" al encabezado, auto-scroll, botón limpiar. Tests.
+- **Fase B** ✅ — `context.py` (SessionContext 3 capas), resumen acumulativo en `copilot_loop`, eventos `briefing.set/state`, pestaña 📋 Contexto, ingestión `[context] briefing_file`. Tests.
+- **Fase C** ✅ (código) — engine `nemotron` (`nemotron_stt.py`, streaming cache-aware), `endpoint.py`, `correct.py`, `[nemotron]`/`[asr]`, `scripts/derisk_nemotron.py`. **Pendiente: correr el de-risk en GPU con `.venv-nemotron`** (puerta C0) antes de hacerlo default.
 
 ## Motivación
 
