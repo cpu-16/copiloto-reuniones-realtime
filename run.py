@@ -148,6 +148,8 @@ def main() -> None:
             sys.exit(1)
         trans = ParakeetTranscriber(
             realtime_pause=cfg.whisper.realtime_pause,
+            silence_rms=cfg.parakeet.silence_rms,
+            auto_calibrate=cfg.parakeet.auto_calibrate,
             on_final=on_final, on_partial=on_partial,
         )
     else:

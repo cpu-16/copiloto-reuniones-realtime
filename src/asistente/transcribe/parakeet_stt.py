@@ -15,12 +15,30 @@ from collections.abc import Callable, Iterator
 
 import numpy as np
 
+_LEGACY_RMS = 350.0    # umbral histórico, usado como provisional/fallback
+
+
+def calibrate_threshold(rms_values: list[float], factor: float = 2.5,
+                        min_rms: float = 120.0) -> float:
+    """Deriva el umbral de voz a partir del ruido de fondo medido.
+
+    Usa el percentil 20 de los RMS observados como "piso de ruido" (robusto aunque
+    haya algo de voz en la ventana de calibración: los huecos definen el piso) y lo
+    escala por `factor`, con un mínimo de seguridad. Función pura → testeable sin GPU.
+    """
+    if not rms_values:
+        return min_rms
+    floor = float(np.percentile(np.asarray(rms_values, dtype=np.float32), 20))
+    return max(floor * factor, min_rms)
+
 
 class ParakeetTranscriber:
     def __init__(self, model_name: str = "nvidia/parakeet-tdt-0.6b-v3",
                  realtime_pause: float = 0.4,
                  post_speech_silence: float = 0.7,
-                 silence_rms: float = 350.0,      # umbral de silencio en escala int16
+                 silence_rms: float = 0.0,        # umbral de voz (int16); 0 = autocalibrar
+                 auto_calibrate: bool = True,     # mide el piso de ruido al arrancar
+                 calib_seconds: float = 1.5,      # ventana de calibración
                  max_utterance_s: float = 20.0,   # corta y finaliza si una frase se alarga
                  on_final: Callable[[str], None] | None = None,
                  on_partial: Callable[[str], None] | None = None) -> None:
@@ -28,9 +46,22 @@ class ParakeetTranscriber:
         self.on_partial = on_partial or (lambda _t: None)
         self.realtime_pause = realtime_pause
         self.post_speech_silence = post_speech_silence
-        self.silence_rms = silence_rms
         self.max_utterance_s = max_utterance_s
         self.sample_rate = 16000
+        # Umbral de voz: manual (silence_rms>0) tiene prioridad; si no y auto_calibrate,
+        # se mide al arrancar (provisional _LEGACY_RMS hasta calibrar); si no, fijo legacy.
+        self.calib_seconds = calib_seconds
+        if silence_rms and silence_rms > 0:
+            self.silence_rms = float(silence_rms)
+            self._calibrating = False
+        elif auto_calibrate:
+            self.silence_rms = _LEGACY_RMS
+            self._calibrating = True
+        else:
+            self.silence_rms = _LEGACY_RMS
+            self._calibrating = False
+        self._calib_rms: list[float] = []
+        self._calib_dur = 0.0
 
         import nemo.collections.asr as nemo_asr
         # Cargar en CPU, pasar a fp16 y RECIÉN ahí mover a la GPU: así el pico de
@@ -67,6 +98,19 @@ class ParakeetTranscriber:
                 continue
             rms = float(np.sqrt(np.mean(a16.astype(np.float32) ** 2)))
             dur = a16.size / sample_rate
+            # Autocalibración: en los primeros segundos medimos el ruido de fondo y
+            # fijamos el umbral; no buffereamos ese audio (se descarta el arranque).
+            if self._calibrating:
+                self._calib_rms.append(rms)
+                self._calib_dur += dur
+                if self._calib_dur >= self.calib_seconds:
+                    self.silence_rms = calibrate_threshold(self._calib_rms)
+                    floor = float(np.percentile(self._calib_rms, 20)) if self._calib_rms else 0.0
+                    print(f"  [parakeet] umbral autocalibrado: silence_rms="
+                          f"{self.silence_rms:.0f} (piso≈{floor:.0f}, "
+                          f"muestras={len(self._calib_rms)})")
+                    self._calibrating = False
+                continue
             af = a16.astype(np.float32) / 32768.0
             with self._lock:
                 self._buf.append(af)

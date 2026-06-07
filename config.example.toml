@@ -33,6 +33,14 @@ compute_type = "float16"
 # "" = autodetecta idioma por frase (reuniones bilingües es/en). "es" lo fuerza.
 language = ""
 
+[parakeet]
+# Umbral RMS (escala int16) para detectar voz. Si el audio del sink viene bajo y no
+# transcribe NADA, este suele ser el culpable.
+#   silence_rms = 0    -> autocalibra el piso de ruido al arrancar (recomendado)
+#   silence_rms = 350  -> umbral fijo manual (ignora la autocalibración)
+silence_rms = 0
+auto_calibrate = true   # mide el ruido de fondo en los primeros ~1.5s y fija el umbral
+
 [claude]
 model = "haiku"
 

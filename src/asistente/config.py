@@ -33,6 +33,13 @@ class WhisperCfg(BaseModel):
     language: str = "es"
 
 
+class ParakeetCfg(BaseModel):
+    # Umbral RMS (escala int16) para considerar "voz". 0 = autocalibrar al arrancar.
+    # >0 = umbral fijo manual (ignora la autocalibración).
+    silence_rms: float = 0.0
+    auto_calibrate: bool = True   # mide el piso de ruido en los primeros segundos
+
+
 class ClaudeCfg(BaseModel):
     model: str = "haiku"
 
@@ -49,6 +56,7 @@ class Config(BaseModel):
     user: UserCfg = UserCfg()
     audio: AudioCfg = AudioCfg()
     whisper: WhisperCfg = WhisperCfg()
+    parakeet: ParakeetCfg = ParakeetCfg()
     claude: ClaudeCfg = ClaudeCfg()
     copilot: CopilotCfg = CopilotCfg()
     server: ServerCfg = ServerCfg()
