@@ -13,6 +13,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # XWayland: frameless/on-top fiables
 
 import json  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+from asistente.ui.history import append_history  # noqa: E402
 
 from PySide6.QtCore import Qt, QUrl  # noqa: E402
 from PySide6.QtWebSockets import QWebSocket  # noqa: E402
@@ -284,6 +287,7 @@ class AssistantWidget(QWidget):
         actrow.setContentsMargins(0, 0, 0, 0)
         actrow.setSpacing(4)
         for label, slot in [("🔄 actualizar", self._refresh_tab),
+                            ("🧹 limpiar", self._clear_tab),
                             ("copiar", self._copy_tab), ("✕", self._close_panel)]:
             b = QPushButton(label)
             b.clicked.connect(slot)
@@ -348,8 +352,9 @@ class AssistantWidget(QWidget):
         self._tab_buttons[i].setChecked(True)
 
     def _ask_tab(self, tab: str) -> None:
+        # "pensando" va al encabezado, NO al cuerpo: así no se pisa el historial.
         self._pending.add(tab)
-        self._tab_edit[tab].setPlainText("⏳ pensando…")
+        self.panel_hdr.setText(TAB_TITLES[tab] + "  ⏳…")
         self.ws.sendTextMessage(json.dumps({"type": "ask", "text": PROMPTS[tab], "tab": tab}))
 
     def _refresh_tab(self) -> None:
@@ -358,6 +363,11 @@ class AssistantWidget(QWidget):
             return  # la pestaña libre se rellena con el cuadro, no tiene prompt fijo
         self._loaded.discard(tab)
         self._ask_tab(tab)
+
+    def _clear_tab(self) -> None:
+        tab = self._index_tab[self.stack.currentIndex()]
+        self._tab_edit[tab].clear()
+        self._loaded.discard(tab)
 
     def _copy_tab(self) -> None:
         tab = self._index_tab[self.stack.currentIndex()]
@@ -419,11 +429,15 @@ class AssistantWidget(QWidget):
             tab = m.get("tab", "libre")
             edit = self._tab_edit.get(tab)
             if edit is not None:
-                edit.setPlainText(m.get("text", ""))
+                # Acumula: la respuesta nueva se añade debajo de las anteriores con hora.
+                when = datetime.now().strftime("%H:%M")
+                edit.setPlainText(append_history(edit.toPlainText(), m.get("text", ""), when))
                 self._loaded.add(tab)
                 self._pending.discard(tab)
                 self._open_panel()
                 self._select_tab(tab)
+                sb = edit.verticalScrollBar()   # auto-scroll a lo último
+                sb.setValue(sb.maximum())
         elif t == "insight":
             parts = []
             if m.get("summary"):
@@ -455,7 +469,7 @@ class AssistantWidget(QWidget):
         self._open_panel()
         self._select_tab("libre")
         self._pending.add("libre")
-        self._tab_edit["libre"].setPlainText("⏳ pensando…")
+        self.panel_hdr.setText(TAB_TITLES["libre"] + "  ⏳…")
         self.ws.sendTextMessage(json.dumps({"type": "ask", "text": text, "tab": "libre"}))
         self.ask.clear()
 
