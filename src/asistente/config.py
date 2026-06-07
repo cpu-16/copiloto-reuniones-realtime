@@ -40,6 +40,20 @@ class ParakeetCfg(BaseModel):
     auto_calibrate: bool = True   # mide el piso de ruido en los primeros segundos
 
 
+class NemotronCfg(BaseModel):
+    model: str = "nvidia/nemotron-3.5-asr-streaming-0.6b"
+    # [izq, der] del contexto de atención; [56,13]=1120ms (más preciso),
+    # [56,6]=560ms, [56,3]=320ms (más baja latencia).
+    att_context_size: list[int] = [56, 13]
+    target_lang: str = "es"   # "es" fuerza español; "auto" autodetecta
+
+
+class AsrCfg(BaseModel):
+    # Glosario de términos/nombres del proyecto para corregir la transcripción.
+    glossary: list[str] = []
+    correct_enabled: bool = True   # corrección post-ASR por similitud (sin LLM)
+
+
 class ContextCfg(BaseModel):
     # Briefing durable de la sesión (capa 1): proyecto, participantes, objetivos, términos.
     briefing: str = ""
@@ -67,6 +81,8 @@ class Config(BaseModel):
     audio: AudioCfg = AudioCfg()
     whisper: WhisperCfg = WhisperCfg()
     parakeet: ParakeetCfg = ParakeetCfg()
+    nemotron: NemotronCfg = NemotronCfg()
+    asr: AsrCfg = AsrCfg()
     context: ContextCfg = ContextCfg()
     claude: ClaudeCfg = ClaudeCfg()
     copilot: CopilotCfg = CopilotCfg()

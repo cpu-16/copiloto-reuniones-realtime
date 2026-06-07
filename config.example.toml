@@ -1,6 +1,8 @@
 # Copia a config.toml y ajusta
 # Motor de transcripción:
-#   "parakeet" = NVIDIA Parakeet TDT v3 (liviano ~1.3GB, rápido). Usa .venv-parakeet.
+#   "nemotron" = NVIDIA Nemotron 3.5 ASR streaming 0.6B (cache-aware, baja latencia,
+#                mejor WER en español). Usa .venv-nemotron (NeMo 26.06+). [recomendado]
+#   "parakeet" = NVIDIA Parakeet TDT v3 (liviano ~1.3GB). Usa .venv-parakeet. [respaldo]
 #   "whisper"  = faster-whisper turbo (~2.9GB). Usa .venv.
 engine = "parakeet"
 
@@ -35,11 +37,25 @@ language = ""
 
 [parakeet]
 # Umbral RMS (escala int16) para detectar voz. Si el audio del sink viene bajo y no
-# transcribe NADA, este suele ser el culpable.
+# transcribe NADA, este suele ser el culpable. (Solo aplica al engine "parakeet";
+# "nemotron" hace streaming continuo y no usa umbral de energía.)
 #   silence_rms = 0    -> autocalibra el piso de ruido al arrancar (recomendado)
 #   silence_rms = 350  -> umbral fijo manual (ignora la autocalibración)
 silence_rms = 0
 auto_calibrate = true   # mide el ruido de fondo en los primeros ~1.5s y fija el umbral
+
+[nemotron]
+model = "nvidia/nemotron-3.5-asr-streaming-0.6b"
+# Contexto de atención [izq, der]: [56,13]=1120ms (más preciso, recomendado),
+# [56,6]=560ms, [56,3]=320ms (más baja latencia, algo menos preciso).
+att_context_size = [56, 13]
+target_lang = "es"   # "es" fuerza español; "auto" autodetecta el idioma
+
+[asr]
+# Glosario de términos/nombres del proyecto para corregir la transcripción (nombres
+# propios, jerga). Aplica al engine nemotron. Ej: ["Kubernetes", "Rafael Valdés"].
+glossary = []
+correct_enabled = true   # corrección post-ASR por similitud contra el glosario (sin LLM)
 
 [context]
 # Contexto durable para que el copiloto no pierda el enfoque en llamadas largas.

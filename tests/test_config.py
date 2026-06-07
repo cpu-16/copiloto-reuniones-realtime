@@ -30,3 +30,21 @@ def test_parakeet_overrides(tmp_path: Path):
     cfg = load_config(p)
     assert cfg.parakeet.silence_rms == 420
     assert cfg.parakeet.auto_calibrate is False
+
+
+def test_nemotron_y_asr_defaults_y_overrides(tmp_path: Path):
+    p = tmp_path / "config.toml"
+    p.write_text(
+        'engine="nemotron"\n'
+        '[server]\ntoken="t"\n'
+        '[nemotron]\natt_context_size=[56,6]\ntarget_lang="auto"\n'
+        '[asr]\nglossary=["Kubernetes","Rafael Valdés"]\n'
+    )
+    cfg = load_config(p)
+    assert cfg.engine == "nemotron"
+    assert cfg.nemotron.att_context_size == [56, 6]
+    assert cfg.nemotron.target_lang == "auto"
+    assert "Kubernetes" in cfg.asr.glossary
+    assert cfg.asr.correct_enabled is True   # default
+    # defaults del modelo nemotron
+    assert "nemotron" in cfg.nemotron.model

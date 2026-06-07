@@ -148,7 +148,23 @@ def main() -> None:
         maybe_suggest(text)
 
     cap = PipeWireCapture(target=cfg.audio.target, rate=cfg.audio.sample_rate)
-    if cfg.engine == "parakeet":
+    if cfg.engine == "nemotron":
+        print("Motor de transcripción: Nemotron streaming (NeMo). Cargando modelo…")
+        try:
+            from asistente.transcribe.nemotron_stt import NemotronTranscriber
+        except ImportError as e:
+            print(f"\n  ⚠  engine='nemotron' necesita el venv .venv-nemotron (NeMo 26.06+): {e}")
+            print("     Corre:  .venv-nemotron/bin/python run.py --native\n")
+            sys.exit(1)
+        trans = NemotronTranscriber(
+            model_name=cfg.nemotron.model,
+            att_context_size=cfg.nemotron.att_context_size,
+            target_lang=cfg.nemotron.target_lang,
+            glossary=cfg.asr.glossary,
+            correct_enabled=cfg.asr.correct_enabled,
+            on_final=on_final, on_partial=on_partial,
+        )
+    elif cfg.engine == "parakeet":
         print("Motor de transcripción: Parakeet (NeMo). Cargando modelo (~40s)…")
         try:
             from asistente.transcribe.parakeet_stt import ParakeetTranscriber

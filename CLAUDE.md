@@ -9,17 +9,21 @@ y usa Claude (vía la suscripción, no API key) para sugerir respuestas y dar co
 ventanita flotante. Pensado para Fedora + Wayland + NVIDIA. Todo el procesamiento es local; solo el
 **texto** de la transcripción va a Claude.
 
-## Dos entornos virtuales (¡importante!)
+## Tres entornos virtuales (¡importante!)
 
-Hay **dos motores ASR** y cada uno vive en su venv porque sus dependencias (torch) chocan:
+Hay **tres motores ASR** y cada uno vive en su venv porque sus dependencias (torch/NeMo) chocan:
 
 - **`.venv`** — motor **whisper** (faster-whisper/RealtimeSTT). `pip install -e ".[dev]"`.
-- **`.venv-parakeet`** — motor **parakeet** (NVIDIA NeMo, recomendado, más liviano). Se instala con `uv pip`
+- **`.venv-parakeet`** — motor **parakeet** (NVIDIA NeMo 2.7.x, liviano, *respaldo*). Se instala con `uv pip`
   (es un venv de uv, **no tiene `pip` propio**; usa `uv pip install --python .venv-parakeet ...`). El paquete
   `asistente` se instala ahí con `--no-deps` para no arrastrar las deps de whisper.
+- **`.venv-nemotron`** — motor **nemotron** (NVIDIA Nemotron 3.5 ASR streaming 0.6B, cache-aware, *recomendado*).
+  Requiere **NeMo 26.06 / git main** (`uv pip install --python .venv-nemotron "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git@<commit>"`)
+  + `asistente --no-deps`. Streaming nativo de baja latencia y mejor WER en español. **Antes de confiar en él,
+  corre la puerta de verificación** `scripts/derisk_nemotron.py` (carga, latencia, glosario).
 
-El motor se elige con `engine = "parakeet"|"whisper"` en `config.toml`. **Corre `run.py` con el venv que
-corresponda al engine** o saldrá un error claro. Ambos venvs están gitignorados.
+El motor se elige con `engine = "nemotron"|"parakeet"|"whisper"` en `config.toml`. **Corre `run.py` con el venv que
+corresponda al engine** o saldrá un error claro. Los tres venvs están gitignorados.
 
 ## Comandos
 
