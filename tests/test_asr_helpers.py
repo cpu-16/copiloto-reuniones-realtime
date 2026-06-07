@@ -29,6 +29,19 @@ def test_correct_ignora_terminos_multipalabra():
     assert out == "hola rafael"
 
 
+def test_correct_no_daña_palabras_comunes_con_acronimos_cortos():
+    # "plan" NO debe volverse "LAN", ni "rama" -> "RAM" (acrónimos < 5 letras = inertes)
+    gloss = ["LAN", "RAM", "VPN", "DNS"]
+    assert correct_terms("tenemos un plan claro", gloss) == "tenemos un plan claro"
+    assert correct_terms("la rama principal", gloss) == "la rama principal"
+
+
+def test_correct_si_aplica_a_nombres_de_producto_largos():
+    # nombres de 5+ letras sí se corrigen
+    assert "Proxmox" in correct_terms("instalamos proxmax", ["Proxmox"])
+    assert "Cloudflare" in correct_terms("migramos a cloudflar", ["Cloudflare"])
+
+
 # ---- endpointing / segmentación ----
 
 def test_segment_una_frase_completa():

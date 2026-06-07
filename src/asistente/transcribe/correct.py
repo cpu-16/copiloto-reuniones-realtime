@@ -24,8 +24,10 @@ def correct_terms(text: str, glossary: list[str], threshold: float = 0.82) -> st
             continue
         best, score = "", 0.0
         for term in glossary:
-            if " " in term:   # los términos multi-palabra no se casan contra una sola
+            if " " in term:        # los términos multi-palabra no se casan contra una sola
                 continue
+            if len(term) < 5:      # acrónimos cortos NO por similitud: "plan"->"LAN",
+                continue           # "rama"->"RAM"… falsos positivos. (Van por boosting.)
             r = SequenceMatcher(None, core.lower(), term.lower()).ratio()
             if r > score:
                 best, score = term, r
