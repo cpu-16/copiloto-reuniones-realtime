@@ -22,6 +22,7 @@ from collections.abc import Callable, Iterator
 
 import numpy as np
 
+from asistente.transcribe.clean import strip_lang_tags
 from asistente.transcribe.correct import correct_terms
 from asistente.transcribe.endpoint import segment_finals
 
@@ -200,7 +201,8 @@ class NemotronTranscriber:
             previous_hypotheses = best_hyps
             step += 1
 
-            full = best_hyps[0].text if best_hyps else ""
+            # strip_lang_tags quita las etiquetas <es-US>/<en-US> que emite el modo auto.
+            full = strip_lang_tags(best_hyps[0].text) if best_hyps else ""
             now = time.monotonic()
             if full != last_full:
                 last_full = full

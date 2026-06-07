@@ -37,3 +37,13 @@ def is_hallucination(text: str) -> bool:
     if not n:
         return True
     return n in _JUNK
+
+
+# Etiquetas de idioma que emite el ASR multilingüe (Nemotron) en modo auto: <es-US>,
+# <en-US>, <pt-BR>, <es>, etc. No queremos mostrarlas en la transcripción.
+_LANG_TAG = re.compile(r"<[a-z]{2,3}(?:-[A-Za-z]{2})?>")
+
+
+def strip_lang_tags(text: str) -> str:
+    """Quita las etiquetas de idioma (<es-US>, <en-US>…) y normaliza espacios."""
+    return re.sub(r"\s+", " ", _LANG_TAG.sub(" ", text)).strip()

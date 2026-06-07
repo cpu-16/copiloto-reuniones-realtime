@@ -67,10 +67,10 @@ THEMES = [
     {  # vidrio (muy transparente)
         "root": "rgba(30,34,44,90)", "bar": "rgba(40,44,56,120)",
         "text": "#f0f4ff", "sub": "#bbddff", "title": "#bbccdd",
-        "live": "#ccddee", "card": "rgba(30,70,50,120)", "cardbd": "#55cc99",
+        "live": "#ccddee", "card": "rgba(26,60,44,210)", "cardbd": "#55cc99",
         "cardtx": "#eeffff", "inbg": "rgba(20,24,32,120)", "intx": "#ffffff",
         "inbd": "rgba(180,200,230,90)", "btn": "rgba(60,66,80,140)", "btntx": "#eeeeff",
-        "ins": "rgba(40,46,62,120)", "instx": "#e6ecff",
+        "ins": "rgba(30,36,52,210)", "instx": "#e6ecff",
     },
     {  # vidrio legible (semi-transparente pero con letras claras)
         "root": "rgba(16,18,26,210)", "bar": "rgba(28,32,44,228)",
@@ -97,9 +97,10 @@ def _qss(t: dict) -> str:
     QLabel#title {{ color: {t['title']}; font-size: 11px; }}
     QLabel#insight {{ background: {t['ins']}; color: {t['instx']}; padding: 6px 9px;
                       font-size: 12px; border-bottom: 1px solid {t['cardbd']}; }}
-    QTextEdit#transcript {{ background: transparent; color: {t['text']};
-                            border: none; font-size: 13px; }}
-    QLabel#live {{ color: {t['live']}; font-style: italic; padding: 2px 8px; }}
+    QTextEdit#transcript {{ background: {t['ins']}; color: {t['text']};
+                            border: none; font-size: 13px; padding: 4px 8px; }}
+    QLabel#live {{ background: {t['ins']}; color: {t['live']}; font-style: italic;
+                   padding: 2px 8px; }}
     QLabel#suggestion {{ background: {t['card']}; color: {t['cardtx']};
                          border-top: 1px solid {t['cardbd']}; padding: 8px; font-size: 13px; }}
     QLineEdit {{ background: {t['inbg']}; color: {t['intx']}; border: 1px solid {t['inbd']};
