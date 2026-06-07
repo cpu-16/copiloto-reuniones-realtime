@@ -2,7 +2,7 @@ import json
 import pytest
 from asistente.events import (
     TranscriptFinal, Suggestion, parse_client_event, AskCommand,
-    Answer, CaptureCommand,
+    Answer, CaptureCommand, BriefingSet, BriefingState,
 )
 
 
@@ -47,6 +47,18 @@ def test_parse_client_event_capture():
     cmd = parse_client_event('{"type": "capture", "paused": true}')
     assert isinstance(cmd, CaptureCommand)
     assert cmd.paused is True
+
+
+def test_parse_client_event_briefing_set():
+    cmd = parse_client_event('{"type": "briefing.set", "text": "Proyecto Acme"}')
+    assert isinstance(cmd, BriefingSet)
+    assert cmd.text == "Proyecto Acme"
+
+
+def test_briefing_state_serializa():
+    data = json.loads(BriefingState(text="ctx").model_dump_json())
+    assert data["type"] == "briefing.state"
+    assert data["text"] == "ctx"
 
 
 def test_parse_client_event_tipo_desconocido():

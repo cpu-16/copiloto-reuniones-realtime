@@ -74,7 +74,20 @@ class CaptureCommand(BaseModel):
     paused: bool
 
 
-ClientEvent = Union[AskCommand, ClearCommand, CaptureCommand]
+class BriefingSet(BaseModel):
+    """UI -> servidor: fija el briefing durable de la sesión (capa 1 del contexto)."""
+    type: Literal["briefing.set"] = "briefing.set"
+    text: str
+
+
+class BriefingState(BaseModel):
+    """Servidor -> UI: el briefing actual (eco tras set o tras ingestión inicial),
+    para sincronizar el contenido entre UIs."""
+    type: Literal["briefing.state"] = "briefing.state"
+    text: str
+
+
+ClientEvent = Union[AskCommand, ClearCommand, CaptureCommand, BriefingSet]
 
 
 def parse_client_event(raw: str) -> ClientEvent:
@@ -87,4 +100,6 @@ def parse_client_event(raw: str) -> ClientEvent:
         return ClearCommand(**data)
     if kind == "capture":
         return CaptureCommand(**data)
+    if kind == "briefing.set":
+        return BriefingSet(**data)
     raise ValueError(f"Evento de cliente desconocido: {kind!r}")

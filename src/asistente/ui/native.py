@@ -32,15 +32,19 @@ QUICK_ACTIONS = [
     ("pregunto", "❓ ¿Qué pregunto?", "Sugiéreme 2 buenas preguntas que yo podría hacer ahora."),
     ("respondo", "🙋 Responder", "Ayúdame a responder lo último que se dijo, con una respuesta breve que yo podría dar."),
 ]
-# Orden e iconos de las pestañas dentro del panel (incluye "libre" para el cuadro de texto).
+# Orden e iconos de las pestañas dentro del panel ("libre" = cuadro de texto;
+# "contexto" = briefing durable editable de la sesión).
 PANEL_TABS = [
     ("ideas", "💡"), ("resumen", "📝"), ("pregunto", "❓"),
-    ("respondo", "🙋"), ("libre", "💬"),
+    ("respondo", "🙋"), ("libre", "💬"), ("contexto", "📋"),
 ]
 TAB_TITLES = {
     "ideas": "💡 Ideas", "resumen": "📝 Resumen", "pregunto": "❓ Preguntas",
     "respondo": "🙋 Responder", "libre": "💬 Pregunta libre",
+    "contexto": "📋 Contexto de sesión",
 }
+# Pestañas que NO se consultan a Claude al abrirlas (se llenan a mano).
+_NO_ASK_TABS = {"libre", "contexto"}
 PROMPTS = {tab: prompt for tab, _label, prompt in QUICK_ACTIONS}
 
 THEMES = [
@@ -276,8 +280,14 @@ class AssistantWidget(QWidget):
         for tab, _icon in PANEL_TABS:
             edit = QTextEdit()
             edit.setObjectName("answer")
-            edit.setReadOnly(True)
-            edit.setPlaceholderText("Toca esta pestaña para pedirlo…")
+            if tab == "contexto":   # editable: el usuario escribe el briefing
+                edit.setReadOnly(False)
+                edit.setPlaceholderText(
+                    "Proyecto, participantes, objetivos, términos… "
+                    "(se envía a Claude como contexto durable de la sesión)")
+            else:
+                edit.setReadOnly(True)
+                edit.setPlaceholderText("Toca esta pestaña para pedirlo…")
             self._tab_edit[tab] = edit
             self.stack.addWidget(edit)
         pl.addWidget(self.stack, 1)
@@ -287,6 +297,7 @@ class AssistantWidget(QWidget):
         actrow.setContentsMargins(0, 0, 0, 0)
         actrow.setSpacing(4)
         for label, slot in [("🔄 actualizar", self._refresh_tab),
+                            ("💾 contexto", self._save_briefing),
                             ("🧹 limpiar", self._clear_tab),
                             ("copiar", self._copy_tab), ("✕", self._close_panel)]:
             b = QPushButton(label)
@@ -342,7 +353,7 @@ class AssistantWidget(QWidget):
         Si ya tiene contenido, solo la muestra (no re-consulta)."""
         self._open_panel()
         self._select_tab(tab)
-        if tab != "libre" and tab not in self._loaded and tab not in self._pending:
+        if tab not in _NO_ASK_TABS and tab not in self._loaded and tab not in self._pending:
             self._ask_tab(tab)
 
     def _select_tab(self, tab: str) -> None:
@@ -359,10 +370,19 @@ class AssistantWidget(QWidget):
 
     def _refresh_tab(self) -> None:
         tab = self._index_tab[self.stack.currentIndex()]
-        if tab == "libre":
-            return  # la pestaña libre se rellena con el cuadro, no tiene prompt fijo
+        if tab in _NO_ASK_TABS:
+            return  # libre/contexto se llenan a mano, no tienen prompt fijo
         self._loaded.discard(tab)
         self._ask_tab(tab)
+
+    def _save_briefing(self) -> None:
+        """Envía el contenido de la pestaña Contexto como briefing durable."""
+        edit = self._tab_edit.get("contexto")
+        if edit is None:
+            return
+        self.ws.sendTextMessage(
+            json.dumps({"type": "briefing.set", "text": edit.toPlainText()}))
+        self.panel_hdr.setText(TAB_TITLES["contexto"] + "  ✓ guardado")
 
     def _clear_tab(self) -> None:
         tab = self._index_tab[self.stack.currentIndex()]
@@ -438,6 +458,11 @@ class AssistantWidget(QWidget):
                 self._select_tab(tab)
                 sb = edit.verticalScrollBar()   # auto-scroll a lo último
                 sb.setValue(sb.maximum())
+        elif t == "briefing.state":
+            edit = self._tab_edit.get("contexto")
+            # No pisar si el usuario está editando justo ahora.
+            if edit is not None and not edit.hasFocus():
+                edit.setPlainText(m.get("text", ""))
         elif t == "insight":
             parts = []
             if m.get("summary"):

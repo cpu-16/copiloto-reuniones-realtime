@@ -40,6 +40,16 @@ class ParakeetCfg(BaseModel):
     auto_calibrate: bool = True   # mide el piso de ruido en los primeros segundos
 
 
+class ContextCfg(BaseModel):
+    # Briefing durable de la sesión (capa 1): proyecto, participantes, objetivos, términos.
+    briefing: str = ""
+    # Archivo o ruta a leer y resumir UNA vez al arrancar; el resumen entra al briefing.
+    briefing_file: str = ""
+    window: int = 12          # frases en la ventana rodante (capa 3)
+    summary_every: int = 8    # cada cuántos finales se actualiza el resumen acumulativo
+    max_chars: int = 2000     # presupuesto de caracteres del contexto compuesto
+
+
 class ClaudeCfg(BaseModel):
     model: str = "haiku"
 
@@ -57,6 +67,7 @@ class Config(BaseModel):
     audio: AudioCfg = AudioCfg()
     whisper: WhisperCfg = WhisperCfg()
     parakeet: ParakeetCfg = ParakeetCfg()
+    context: ContextCfg = ContextCfg()
     claude: ClaudeCfg = ClaudeCfg()
     copilot: CopilotCfg = CopilotCfg()
     server: ServerCfg = ServerCfg()

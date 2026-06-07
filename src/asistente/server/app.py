@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from asistente.config import Config
 from asistente.events import (
-    Status, Suggestion, Answer, Toggle, parse_client_event,
+    Status, Suggestion, Answer, Toggle, BriefingSet, BriefingState, parse_client_event,
     AskCommand, CaptureCommand,
 )
 
@@ -20,12 +20,13 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
 
 
 def _ask_prompt(ctx, question: str) -> str:
-    """Arma el prompt de una pregunta manual incluyendo el contexto reciente."""
-    contexto = "\n".join(ctx) if ctx else ""
+    """Arma el prompt de una pregunta manual incluyendo el contexto de la sesión
+    (briefing + resumen + ventana, vía SessionContext.compose)."""
+    contexto = ctx.compose() if ctx is not None and hasattr(ctx, "compose") else ""
     if not contexto:
         return question
     return (
-        f"Contexto reciente de la reunión:\n{contexto}\n\n"
+        f"{contexto}\n\n"
         f"Pregunta del usuario: {question}\n\n"
         f"Responde de forma breve y útil en español."
     )
@@ -96,6 +97,12 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
                     else:
                         app.state.paused.clear()
                     await broadcast(Status(state="pausado" if cmd.paused else "capturando"))
+                elif isinstance(cmd, BriefingSet):
+                    # Fija el briefing durable y lo difunde para sincronizar las UIs.
+                    ctx = getattr(app.state, "ctx", None)
+                    if ctx is not None and hasattr(ctx, "set_briefing"):
+                        ctx.set_briefing(cmd.text)
+                    await broadcast(BriefingState(text=cmd.text))
                 elif isinstance(cmd, AskCommand) and app.state.brain:
                     paused = app.state.paused.is_set()
                     await ws.send_text(Status(state="pensando").model_dump_json())

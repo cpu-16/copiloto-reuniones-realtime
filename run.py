@@ -11,14 +11,16 @@ import socket
 import sys
 import threading
 import time
-from collections import deque
 
 import uvicorn
 
 from asistente.config import load_config
 from asistente.brain.claude_client import WarmClaude
 from asistente.capture.pipewire import PipeWireCapture
-from asistente.events import TranscriptFinal, TranscriptPartial, Suggestion, Status, Insight
+from asistente.context import SessionContext, build_summary_prompt, load_briefing_source
+from asistente.events import (
+    TranscriptFinal, TranscriptPartial, Suggestion, Status, Insight, BriefingState,
+)
 from asistente.detect import is_question_for_me
 from asistente.transcribe.clean import is_hallucination
 from asistente.copilot import build_copilot_prompt, parse_copilot
@@ -56,10 +58,11 @@ def main() -> None:
         except Exception:
             pass
 
-    # Buffer rodante de contexto reciente para alimentar a Claude.
-    # Lo compartimos con el servidor para que el "preguntar" manual también
-    # use el contexto de la reunión, no solo el proactivo.
-    ctx = deque(maxlen=12)
+    # Contexto de sesión en 3 capas (briefing durable + resumen acumulativo + ventana
+    # rodante). Lo compartimos con el servidor para que el "preguntar" manual, la
+    # sugerencia proactiva y el copiloto usen el MISMO contexto compuesto.
+    ctx = SessionContext(window=cfg.context.window, summary_every=cfg.context.summary_every)
+    ctx.set_briefing(cfg.context.briefing)
     app.state.ctx = ctx
     names = cfg.user.names
     yo = names[0] if names else "la persona"
@@ -71,10 +74,9 @@ def main() -> None:
         y luego lo refina con la pregunta concreta."""
         if cop["draft"]:
             _push(Suggestion(text=cop["draft"], ready=True))  # instantáneo
-        contexto = "\n".join(ctx)
+        contexto = ctx.compose(cfg.context.max_chars)
         prompt = (
-            f"Eres copiloto de {yo} ({cfg.user.role}). "
-            f"Contexto reciente de la reunión:\n{contexto}\n\n"
+            f"Eres copiloto de {yo} ({cfg.user.role}).\n{contexto}\n\n"
             f"Acaban de preguntarle algo a {yo}: \"{question}\". "
             f"Sugiere una respuesta breve y natural que {yo} podría decir."
         )
@@ -91,10 +93,10 @@ def main() -> None:
         ideas + borrador + alerta de decisión/tarea, y lo difunde como Insight."""
         while True:
             time.sleep(max(3.0, cfg.copilot.interval_s))
-            if len(ctx) <= cop["seen"]:
-                continue  # nada nuevo
-            cop["seen"] = len(ctx)
-            contexto = "\n".join(ctx)
+            if ctx.total <= cop["seen"]:
+                continue  # nada nuevo (total es monotónico, no se topa como len(deque))
+            cop["seen"] = ctx.total
+            contexto = ctx.compose(cfg.context.max_chars)
             try:
                 raw = brain.ask(build_copilot_prompt(cfg.user.role, names, contexto))
                 p = parse_copilot(raw)
@@ -103,6 +105,14 @@ def main() -> None:
                 _push(Insight(summary=p["summary"], ideas=p["ideas"], alert=p["alert"]))
             except Exception as e:  # noqa: BLE001
                 print("  copiloto:", e)
+            # Resumen acumulativo: menos frecuente, reemplaza al anterior (mantiene el
+            # foco entre cambios de tema sin inflar el contexto). Mismo pipe de Claude.
+            if ctx.needs_summary():
+                nuevas = ctx.take_new_for_summary()
+                try:
+                    ctx.set_summary(brain.ask(build_summary_prompt(ctx.running_summary, nuevas)))
+                except Exception as e:  # noqa: BLE001
+                    print("  resumen:", e)
 
     # Cooldown para no disparar la sugerencia muchas veces por la misma pregunta.
     _sg = {"t": 0.0}
@@ -124,7 +134,7 @@ def main() -> None:
             return
         print("[final]", text)  # eco en terminal para diagnóstico
         _push(TranscriptFinal(text=text, ts=0.0))
-        ctx.append(text)
+        ctx.add_final(text)
         maybe_suggest(text)
 
     def on_partial(text: str) -> None:
@@ -182,6 +192,26 @@ def main() -> None:
         brain.prewarm()
     except Exception as e:
         print("Aviso: prewarm falló:", e)
+
+    # Ingestión del archivo/ruta de contexto: se lee y resume UNA vez, y entra al briefing.
+    if cfg.context.briefing_file:
+        material = load_briefing_source(cfg.context.briefing_file)
+        if material:
+            print(f"Resumiendo material de contexto ({cfg.context.briefing_file})…")
+            try:
+                resumen = brain.ask(
+                    "Resume el siguiente material como briefing breve para una reunión "
+                    "(proyecto, objetivos, términos clave), en viñetas:\n\n" + material
+                )
+                ctx.append_briefing(resumen)
+            except Exception as e:  # noqa: BLE001
+                print("Aviso: no se pudo resumir el material de contexto:", e)
+        else:
+            print(f"Aviso: no se encontró material en {cfg.context.briefing_file}")
+    if ctx.briefing:
+        asyncio.run_coroutine_threadsafe(
+            app.state.broadcast(BriefingState(text=ctx.briefing)), loop
+        )
 
     trans.start(cap.stream(), sample_rate=cfg.audio.sample_rate)
 

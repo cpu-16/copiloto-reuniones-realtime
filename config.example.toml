@@ -41,6 +41,18 @@ language = ""
 silence_rms = 0
 auto_calibrate = true   # mide el ruido de fondo en los primeros ~1.5s y fija el umbral
 
+[context]
+# Contexto durable para que el copiloto no pierda el enfoque en llamadas largas.
+# briefing: texto fijo (proyecto, participantes, objetivos, términos). Editable también
+#   desde la UI (pestaña 📋 Contexto).
+briefing = ""
+# briefing_file: archivo .txt/.md o carpeta; se lee y RESUME una vez al arrancar y entra
+#   al briefing. Ej: "~/proyectos/acme/README.md" o "~/proyectos/acme/docs".
+briefing_file = ""
+window = 12          # frases en la ventana rodante
+summary_every = 8    # cada cuántos finales se actualiza el resumen acumulativo
+max_chars = 2000     # presupuesto de caracteres del contexto enviado a Claude
+
 [claude]
 model = "haiku"
 

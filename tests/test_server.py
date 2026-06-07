@@ -55,6 +55,33 @@ def test_ws_ask_responde_answer_con_tab():
     assert ans["text"] == "respuesta-fake"
 
 
+def test_ws_briefing_set_fija_contexto_y_difunde():
+    from asistente.context import SessionContext
+    cfg = Config()
+    app = create_app(cfg, brain=None, start_audio=False)
+    app.state.ctx = SessionContext()
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws?token={cfg.server.token}") as ws:
+        ws.receive_json()  # status capturando inicial
+        ws.send_json({"type": "briefing.set", "text": "Proyecto Acme, objetivo X"})
+        msg = ws.receive_json()
+        assert msg["type"] == "briefing.state"
+        assert msg["text"] == "Proyecto Acme, objetivo X"
+    assert "Acme" in app.state.ctx.briefing
+
+
+def test_ask_prompt_usa_compose_del_contexto():
+    from asistente.context import SessionContext
+    from asistente.server.app import _ask_prompt
+    ctx = SessionContext()
+    ctx.set_briefing("Proyecto Acme")
+    ctx.add_final("hablamos del despliegue")
+    prompt = _ask_prompt(ctx, "¿qué hago?")
+    assert "Acme" in prompt and "despliegue" in prompt and "¿qué hago?" in prompt
+    # sin contexto, devuelve la pregunta tal cual
+    assert _ask_prompt(None, "hola") == "hola"
+
+
 def test_ws_capture_pausa_y_difunde_status():
     cfg = Config()
     app = create_app(cfg, brain=None, start_audio=False)
