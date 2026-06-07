@@ -67,6 +67,9 @@ class NemotronTranscriber:
         # set_default_att_context_size invoca setup_streaming_params() internamente.
         self.model.encoder.set_default_att_context_size(self.att_context_size)
         self._scfg = self.model.encoder.streaming_cfg
+        print(f"  [nemotron] streaming: chunk={self._scfg.chunk_size} "
+              f"shift={self._scfg.shift_size} pre_cache={self._scfg.pre_encode_cache_size} "
+              f"drop={self._scfg.drop_extra_pre_encoded} lang={self.target_lang}")
 
         # Preprocessor con normalización desactivada (la hacemos por chunk con
         # normalize_batch, como en streaming_utils de NeMo).
@@ -101,16 +104,17 @@ class NemotronTranscriber:
             print("  [nemotron] aviso: no pude desactivar CUDA graphs:", e)
 
     def _maybe_set_language(self) -> None:
-        """Best-effort: fija el idioma de transcripción si el modelo lo soporta. El API
-        exacto se confirma en el de-risk; no es fatal si no aplica."""
-        for attr in ("set_source_lang", "set_target_lang", "set_prompt_lang"):
-            fn = getattr(self.model, attr, None)
-            if callable(fn):
-                try:
-                    fn(self.target_lang)
-                    return
-                except Exception:  # noqa: BLE001
-                    pass
+        """Fija el prompt de idioma para el streaming cache-aware. Este modelo
+        (EncDecRNNTBPEModelWithPrompt) concatena un one-hot de target_lang a la salida
+        del encoder en cada chunk; sin esto decodifica vacío. Debe fallar claro si el
+        idioma no está en el prompt_dictionary del modelo."""
+        set_prompt = getattr(self.model, "set_inference_prompt", None)
+        if not callable(set_prompt):
+            raise RuntimeError(
+                f"{type(self.model).__name__} no soporta prompt-aware streaming "
+                f"(falta set_inference_prompt)."
+            )
+        set_prompt(self.target_lang)   # p.ej. "es" -> índice del prompt_dictionary
 
     # ---- alimentación de audio ----
     def feed(self, pcm_chunks: Iterator[bytes], sample_rate: int = 16000) -> None:
