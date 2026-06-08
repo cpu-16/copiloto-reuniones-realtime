@@ -8,4 +8,5 @@ models/
 *.egg-info/
 *.log
 .venv-parakeet/
+.venv-nemotron/
 .venv-qwen/
