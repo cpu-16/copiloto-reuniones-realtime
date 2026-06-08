@@ -51,6 +51,12 @@ class Toggle(BaseModel):
     type: Literal["toggle"] = "toggle"
 
 
+class Ghost(BaseModel):
+    """Pide a la UI alternar el modo fantasma: la ventana se vuelve atravesable
+    (click-through) y semitransparente. Atajo global (curl /ghost)."""
+    type: Literal["ghost"] = "ghost"
+
+
 class Status(BaseModel):
     type: Literal["status"] = "status"
     state: str           # "capturando", "pensando", "error", ...

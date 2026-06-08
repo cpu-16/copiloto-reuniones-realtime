@@ -82,6 +82,14 @@ def test_ask_prompt_usa_compose_del_contexto():
     assert _ask_prompt(None, "hola") == "hola"
 
 
+def test_ghost_endpoint_valida_token():
+    cfg = Config()
+    app = create_app(cfg, brain=None, start_audio=False)
+    client = TestClient(app)
+    assert client.get(f"/ghost?token={cfg.server.token}").json()["ok"] is True
+    assert client.get("/ghost?token=malo").json()["ok"] is False
+
+
 def test_ws_capture_pausa_y_difunde_status():
     cfg = Config()
     app = create_app(cfg, brain=None, start_audio=False)

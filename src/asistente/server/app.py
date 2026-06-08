@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 from asistente.config import Config
 from asistente.events import (
-    Status, Suggestion, Answer, Toggle, BriefingSet, BriefingState, parse_client_event,
-    AskCommand, CaptureCommand,
+    Status, Suggestion, Answer, Toggle, Ghost, BriefingSet, BriefingState,
+    parse_client_event, AskCommand, CaptureCommand,
 )
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
@@ -75,6 +75,14 @@ def create_app(cfg: Config, brain=None, start_audio: bool = True) -> FastAPI:
         if token != cfg.server.token:
             return {"ok": False}
         await broadcast(Toggle())
+        return {"ok": True}
+
+    @app.get("/ghost")
+    async def ghost(token: str = ""):
+        """Atajo global: alterna el modo fantasma (click-through) de la ventana."""
+        if token != cfg.server.token:
+            return {"ok": False}
+        await broadcast(Ghost())
         return {"ok": True}
 
     @app.websocket("/ws")

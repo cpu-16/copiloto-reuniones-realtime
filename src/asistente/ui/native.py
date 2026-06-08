@@ -127,6 +127,7 @@ class AssistantWidget(QWidget):
         self._theme = 0
         self._expanded = False
         self._paused = False
+        self._ghost = False               # modo fantasma: ventana atravesable (click-through)
         self._loaded: set[str] = set()    # pestañas con respuesta ya cargada
         self._pending: set[str] = set()   # pestañas esperando respuesta
         self._tab_edit: dict[str, QTextEdit] = {}
@@ -160,6 +161,12 @@ class AssistantWidget(QWidget):
         self.pause_btn.setToolTip("Pausar/reanudar captura")
         self.pause_btn.clicked.connect(self._toggle_pause)
         barl.addWidget(self.pause_btn)
+        self.ghost_btn = QPushButton("👻")
+        self.ghost_btn.setToolTip(
+            "Modo fantasma: la ventana se vuelve atravesable (los clics pasan a lo de "
+            "atrás). Para volver, usa el atajo global de fantasma.")
+        self.ghost_btn.clicked.connect(self._toggle_ghost)
+        barl.addWidget(self.ghost_btn)
         for label, slot in [("tema", self._cycle_theme), ("limpiar", self._clear),
                             ("–", self._toggle_min), ("⤢", self._toggle_expand),
                             ("✕", self.close)]:
@@ -409,6 +416,18 @@ class AssistantWidget(QWidget):
             w.style().unpolish(w)
             w.style().polish(w)
 
+    # ---- modo fantasma (click-through) ----
+    def _toggle_ghost(self) -> None:
+        """Alterna click-through: la ventana se vuelve atravesable (los clics pasan a la
+        app de atrás) y semitransparente. Cambiar el flag exige re-mostrar la ventana, así
+        que preservamos la geometría. Para volver a interactuar, usa el atajo global."""
+        self._ghost = not self._ghost
+        geo = self.geometry()
+        self.setWindowFlag(Qt.WindowTransparentForInput, self._ghost)
+        self.setWindowOpacity(0.6 if self._ghost else 1.0)
+        self.show()                 # re-aplica el flag (si no, no surte efecto)
+        self.setGeometry(geo)       # evita que el re-show la reubique
+
     # ---- arrastre ----
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.LeftButton:
@@ -481,6 +500,8 @@ class AssistantWidget(QWidget):
                 self.show()
                 self.raise_()
                 self.activateWindow()
+        elif t == "ghost":
+            self._toggle_ghost()   # atajo global de modo fantasma (curl /ghost)
         elif t == "status":
             state = m.get("state", "")
             detail = m.get("detail", "")

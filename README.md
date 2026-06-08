@@ -97,6 +97,21 @@ Una sola ventana flotante reúne todo. Así se reparte:
 
 ---
 
+## Discreción (ocultar la ventana)
+
+Verdad técnica: en **Linux/Wayland no existe** una forma fiable de excluir una ventana de la captura de pantalla — el compositor ya la pintó en el frame que se comparte, y ningún protocolo (`xdg-desktop-portal`, `wlr-screencopy`) ofrece un "no me captures" por ventana. Ni Cluely ni sus clones lo resuelven en Wayland (dependen de APIs de Windows/macOS). Pero sí puedes mantenerla fuera de vista de tres formas reales:
+
+- **🪟 Comparte una ventana, no la pantalla.** En Meet/Zoom/Teams elige compartir *una ventana o pestaña* concreta; el overlay es otra ventana y **no aparece** en lo que ven los demás.
+- **📱 Segunda pantalla / celular.** Corre con `--no-window` y abre la URL en el celular o un monitor que no compartas — la UI completa vive ahí.
+- **👻 Modo fantasma (click-through).** El botón **👻** (o un atajo global) vuelve la ventana *atravesable* y semitransparente: la sigues viendo, pero los clics pasan a lo que tengas detrás y no estorba. Como en ese modo no puedes clicarla, vuelves con el atajo global:
+  ```bash
+  bash scripts/set_hotkey.sh "<Super>g" ghost     # alterna el modo fantasma
+  ```
+
+> El **stealth real** (invisible incluso en la grabación) llegará con el **port a Windows** vía `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, que el SO sí soporta de forma nativa.
+
+---
+
 ## Arquitectura
 
 Pipeline de 5 piezas desacopladas; `run.py` es el ensamblador que las cablea:
@@ -147,9 +162,11 @@ Tres motores ASR, cada uno en su propio venv (sus dependencias de `torch`/NeMo c
 - 🌗 **Bilingüe automático** — `target_lang = "auto"` detecta es/en sin que hagas nada.
 - 📋 **Contexto que no se pierde** — un *briefing* de sesión (escribes de qué va la reunión, o cargas un archivo/proyecto), un *resumen acumulativo* que mantiene el hilo entre temas, y la ventana de lo más reciente. El copiloto no pierde el foco aunque la llamada salte de tema.
 - 📚 **Glosario** — corrige nombres propios y términos técnicos del proyecto (`Proxmox`, `Cloudflare`, `pfSense`…) que el ASR oye raro.
+- 🧠 **Cerebro intercambiable** — Claude (`claude -p`, suscripción) **o un LLM local** vía Ollama (`[brain] backend`), sin nube ni API key. Mide la latencia local con `scripts/derisk_ollama.py`.
+- 👻 **Modo fantasma** — vuelve la ventana atravesable (click-through) para que no estorbe; parte de la [discreción](#discreción-ocultar-la-ventana).
 - 🎨 **Temas legibles** — oscuro, claro y dos modos vidrio; la ventana se mantiene legible aunque esté semitransparente.
 - ⏸️ **Pausar captura** · 🧹 **limpiar** · arrastrar · minimizar · expandir.
-- 🔒 **Atajo global** (GNOME) para mostrar/ocultar la ventana al vuelo.
+- 🔒 **Atajos globales** (GNOME) para mostrar/ocultar o entrar en modo fantasma al vuelo.
 
 ---
 
@@ -238,12 +255,12 @@ La categoría existe — sobre todo el género de *copilots en vivo* estilo **Cl
 | Procesamiento | ☁️ nube | ☁️ nube | 💻 local | 💻 **local** |
 | Sugerencia en vivo | ❌ (post-reunión) | ✅ | ✅ | ✅ |
 | ASR | propietario | propietario | Whisper | **Nemotron streaming (NeMo)** |
-| LLM | propietario | propietario | Ollama / BYOK | **Claude (suscripción, sin API key)** |
+| LLM | propietario | propietario | Ollama / BYOK | **Claude (suscripción) o Ollama local** |
 | Sistema operativo | web | macOS / Win | macOS / Win | **Linux / Wayland** |
 | Idioma | EN+ | EN | EN | **es/en bilingüe** |
 | Precio | 💲 suscripción | 💲 suscripción | gratis | gratis |
 
-**En resumen:** como *idea* no es nueva (hay un [topic entero `cluely-alternative` en GitHub](https://github.com/topics/cluely-alternative)). Lo distintivo aquí es el **stack**: ASR **Nemotron streaming** en la GPU (no Whisper), **Claude por suscripción** (sin API key ni Ollama), y **Linux/Wayland + español** de primera — una combinación que no se ve en los demás.
+**En resumen:** como *idea* no es nueva (hay un [topic entero `cluely-alternative` en GitHub](https://github.com/topics/cluely-alternative)). Lo distintivo aquí es el **stack**: ASR **Nemotron streaming** en la GPU (no Whisper), cerebro **Claude por suscripción o LLM local** (Ollama), y **Linux/Wayland + español** de primera — una combinación que no se ve en los demás.
 
 > **Referencias** · Open source: [Natively](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant) · [Pluely](https://github.com/iamsrikanthnani/pluely) · [Meetily](https://meetily.ai/). De pago: [Otter.ai](https://otter.ai), Fireflies, [Cluely](https://cluely.com), [Final Round AI](https://www.finalroundai.com).
 >
@@ -265,9 +282,11 @@ Algunas decisiones de diseño que costaron y quedaron documentadas:
 
 ## Roadmap
 
+- [x] Cerebro intercambiable (Claude / Ollama local).
+- [x] Modo fantasma (click-through) para discreción en Linux.
+- [ ] **Port a Windows** con stealth real (`WDA_EXCLUDEFROMCAPTURE`) + captura WASAPI loopback.
 - [ ] Phrase boosting nativo de NeMo (sesgar el decoder con el glosario, no solo corrección por similitud).
 - [ ] Modo fp16 para Nemotron (bajar VRAM a ~1.4 GB).
-- [ ] UI en un segundo dispositivo para ocultarla al compartir pantalla.
 - [ ] Reciclaje del buffer de audio en maratones de varias horas.
 
 ---

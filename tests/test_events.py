@@ -61,6 +61,12 @@ def test_briefing_state_serializa():
     assert data["text"] == "ctx"
 
 
+def test_ghost_serializa():
+    from asistente.events import Ghost
+    data = json.loads(Ghost().model_dump_json())
+    assert data["type"] == "ghost"
+
+
 def test_parse_client_event_tipo_desconocido():
     with pytest.raises(ValueError):
         parse_client_event('{"type": "loquesea"}')
