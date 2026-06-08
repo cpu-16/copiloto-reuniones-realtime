@@ -22,17 +22,21 @@ class LiveTranscriber:
                  realtime_model: str = "small",
                  realtime_pause: float = 0.2,
                  enable_realtime: bool = True,
+                 device: str = "cuda",
                  on_final: Callable[[str], None] | None = None,
                  on_partial: Callable[[str], None] | None = None) -> None:
         self.on_final = on_final or (lambda _t: None)
         self.on_partial = on_partial or (lambda _t: None)
         # "" o "auto" => autodetección por Whisper (reuniones bilingües es/en).
         lang = "" if language in ("", "auto", None) else language
+        # float16 no existe en CPU (CTranslate2): se fuerza int8 si device="cpu".
+        if device == "cpu" and compute_type in ("float16", "fp16"):
+            compute_type = "int8"
         self.recorder = AudioToTextRecorder(
             model=model,
             language=lang,
             compute_type=compute_type,
-            device="cuda",
+            device=device,
             use_microphone=False,        # nosotros alimentamos el audio
             spinner=False,
             post_speech_silence_duration=0.7,

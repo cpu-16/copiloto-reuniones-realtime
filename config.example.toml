@@ -34,6 +34,9 @@ enable_realtime = true
 compute_type = "float16"
 # "" = autodetecta idioma por frase (reuniones bilingües es/en). "es" lo fuerza.
 language = ""
+# device: "cuda" (GPU NVIDIA) o "cpu" (sin GPU). En CPU el compute_type se fuerza a
+# "int8" automáticamente; usa realtime_model="tiny"/"base" para que vaya en tiempo real.
+device = "cuda"
 
 [parakeet]
 # Umbral RMS (escala int16) para detectar voz. Si el audio del sink viene bajo y no

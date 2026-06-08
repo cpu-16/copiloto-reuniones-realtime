@@ -29,8 +29,9 @@ class WhisperCfg(BaseModel):
     realtime_model: str = "small"   # modelo de los parciales (tiny<base<small)
     realtime_pause: float = 0.2     # cada cuántos s re-transcribe (más alto = menos GPU)
     enable_realtime: bool = True    # False = solo finales (mínima GPU, sin texto fluido)
-    compute_type: str = "float16"
+    compute_type: str = "float16"   # en CPU se fuerza a "int8" automáticamente
     language: str = "es"
+    device: str = "cuda"            # "cuda" (GPU NVIDIA) o "cpu" (sin GPU)
 
 
 class ParakeetCfg(BaseModel):

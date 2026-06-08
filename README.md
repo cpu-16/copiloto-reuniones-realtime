@@ -134,6 +134,12 @@ Tres motores ASR, cada uno en su propio venv (sus dependencias de `torch`/NeMo c
 
 **¿Por qué Nemotron?** Es un **RNN-T FastConformer cache-aware**: hace *streaming de verdad* (no re-transcribe el buffer), con baja latencia y muy buen español (WER 4.11% en FLEURS). Detecta **español ↔ inglés** automáticamente por frase — ideal para reuniones donde se mezclan idiomas y términos técnicos.
 
+> ### ¿No tienes GPU?
+> Nemotron y Parakeet necesitan **GPU NVIDIA** (streaming en tiempo real no es viable en CPU). Pero el motor **`whisper` sí corre en CPU**: en `config.toml` pon `[whisper] device = "cpu"` (el `compute_type` pasa a `int8` solo) y usa `realtime_model = "tiny"` o `"base"` para que vaya en tiempo real. Es más lento que en GPU, pero funciona sin tarjeta.
+> ```bash
+> .venv/bin/python run.py --native --engine whisper
+> ```
+
 ---
 
 ## Características
@@ -149,7 +155,7 @@ Tres motores ASR, cada uno en su propio venv (sus dependencias de `torch`/NeMo c
 
 ## Inicio rápido
 
-> **Requisitos:** Fedora con PipeWire, GPU NVIDIA, Python 3.12, [`uv`](https://github.com/astral-sh/uv) y el CLI `claude` autenticado.
+> **Requisitos:** Fedora con PipeWire, **GPU NVIDIA** (o CPU con el motor `whisper`, ver [¿No tienes GPU?](#motores-de-transcripción)), Python 3.12, [`uv`](https://github.com/astral-sh/uv) y el CLI `claude` autenticado.
 
 **1) Motor recomendado — Nemotron (`.venv-nemotron`):**
 ```bash
@@ -220,6 +226,28 @@ Todo vive en `config.toml` (copia de `config.example.toml`, gitignorado). Las pe
 - A Claude solo viaja el **texto** de la transcripción reciente, para las sugerencias.
 - La UI está protegida por token y escucha solo en `127.0.0.1`.
 - Tu `config.toml` (token, glosario, rutas) está **gitignorado** — nunca se sube.
+
+---
+
+## ¿En qué se diferencia?
+
+La categoría existe — sobre todo el género de *copilots en vivo* estilo **Cluely**, que explotó en 2025 — pero casi todos comparten el mismo molde: **Whisper + Ollama/BYOK, macOS/Windows, en inglés**. Este proyecto se sale de ahí:
+
+| | Notetakers cloud<br>(Otter, Fireflies, Fathom) | Copilots en vivo<br>(Cluely, Final Round AI) | Open source<br>(Natively, Pluely, Meetily) | **Este proyecto** |
+|---|:--:|:--:|:--:|:--:|
+| Procesamiento | ☁️ nube | ☁️ nube | 💻 local | 💻 **local** |
+| Sugerencia en vivo | ❌ (post-reunión) | ✅ | ✅ | ✅ |
+| ASR | propietario | propietario | Whisper | **Nemotron streaming (NeMo)** |
+| LLM | propietario | propietario | Ollama / BYOK | **Claude (suscripción, sin API key)** |
+| Sistema operativo | web | macOS / Win | macOS / Win | **Linux / Wayland** |
+| Idioma | EN+ | EN | EN | **es/en bilingüe** |
+| Precio | 💲 suscripción | 💲 suscripción | gratis | gratis |
+
+**En resumen:** como *idea* no es nueva (hay un [topic entero `cluely-alternative` en GitHub](https://github.com/topics/cluely-alternative)). Lo distintivo aquí es el **stack**: ASR **Nemotron streaming** en la GPU (no Whisper), **Claude por suscripción** (sin API key ni Ollama), y **Linux/Wayland + español** de primera — una combinación que no se ve en los demás.
+
+> **Referencias** · Open source: [Natively](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant) · [Pluely](https://github.com/iamsrikanthnani/pluely) · [Meetily](https://meetily.ai/). De pago: [Otter.ai](https://otter.ai), Fireflies, [Cluely](https://cluely.com), [Final Round AI](https://www.finalroundai.com).
+>
+> ⚖️ Úsalo con **consentimiento**: grabar a terceros sin avisar es problemático (a Otter le cayó una demanda colectiva en 2025 por eso). El procesamiento local es para tu privacidad, no para grabar a otros a escondidas.
 
 ---
 
