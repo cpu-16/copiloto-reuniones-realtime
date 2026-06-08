@@ -417,16 +417,26 @@ class AssistantWidget(QWidget):
             w.style().polish(w)
 
     # ---- modo fantasma (click-through) ----
+    def _ghost_http_url(self) -> str:
+        """Deriva la URL http /ghost desde la ws_url (para el curl de emergencia)."""
+        u = self._url.replace("wss://", "https://").replace("ws://", "http://")
+        return u.replace("/ws?", "/ghost?")
+
     def _toggle_ghost(self) -> None:
         """Alterna click-through: la ventana se vuelve atravesable (los clics pasan a la
         app de atrás) y semitransparente. Cambiar el flag exige re-mostrar la ventana, así
-        que preservamos la geometría. Para volver a interactuar, usa el atajo global."""
+        que preservamos la geometría. SALIDAS: el atajo Super+G, el atajo mostrar/ocultar,
+        o el curl que se imprime abajo (para no quedar atrapado sin atajos)."""
         self._ghost = not self._ghost
         geo = self.geometry()
         self.setWindowFlag(Qt.WindowTransparentForInput, self._ghost)
         self.setWindowOpacity(0.6 if self._ghost else 1.0)
         self.show()                 # re-aplica el flag (si no, no surte efecto)
         self.setGeometry(geo)       # evita que el re-show la reubique
+        if self._ghost:
+            print("\n  👻 Modo fantasma ON (ventana atravesable). Para salir:")
+            print("     · atajo Super+G  · tu atajo de mostrar/ocultar  · o ejecuta:")
+            print(f'     curl -s "{self._ghost_http_url()}"\n')
 
     # ---- arrastre ----
     def mousePressEvent(self, e) -> None:
@@ -497,6 +507,8 @@ class AssistantWidget(QWidget):
             if self.isVisible():
                 self.hide()
             else:
+                if self._ghost:           # mostrar SIEMPRE restaura interactividad
+                    self._toggle_ghost()
                 self.show()
                 self.raise_()
                 self.activateWindow()

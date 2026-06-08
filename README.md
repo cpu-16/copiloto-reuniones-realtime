@@ -103,10 +103,11 @@ Verdad técnica: en **Linux/Wayland no existe** una forma fiable de excluir una 
 
 - **🪟 Comparte una ventana, no la pantalla.** En Meet/Zoom/Teams elige compartir *una ventana o pestaña* concreta; el overlay es otra ventana y **no aparece** en lo que ven los demás.
 - **📱 Segunda pantalla / celular.** Corre con `--no-window` y abre la URL en el celular o un monitor que no compartas — la UI completa vive ahí.
-- **👻 Modo fantasma (click-through).** El botón **👻** (o un atajo global) vuelve la ventana *atravesable* y semitransparente: la sigues viendo, pero los clics pasan a lo que tengas detrás y no estorba. Como en ese modo no puedes clicarla, vuelves con el atajo global:
+- **👻 Modo fantasma (click-through).** El botón **👻** vuelve la ventana *atravesable* y semitransparente: la sigues viendo, pero los clics pasan a lo que tengas detrás y no estorba. **Registra el atajo ANTES de usarlo** (en ese modo no puedes clicar la ventana):
   ```bash
   bash scripts/set_hotkey.sh "<Super>g" ghost     # alterna el modo fantasma
   ```
+  Salidas del modo fantasma: el atajo **Super+G**, tu atajo de **mostrar/ocultar**, o el `curl` que se imprime en la terminal al entrar (por si no tienes atajos).
 
 > El **stealth real** (invisible incluso en la grabación) llegará con el **port a Windows** vía `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, que el SO sí soporta de forma nativa.
 
