@@ -22,12 +22,23 @@
 
 <div align="center">
 
-<!-- Sube tu video/gif a docs/images/demo.gif y se mostrará aquí -->
-<img src="docs/images/demo.gif" alt="Demo del copiloto de reuniones" width="100%">
+**🎬 Video demo en camino**
 
 </div>
 
-> En el demo: transcripción bilingüe en vivo, el panel 🧠 con resumen/ideas/alerta del copiloto, la detección de "¿me preguntan a mí?" con respuesta sugerida al instante, y el panel lateral de respuestas a pedido (ideas, resumen, qué preguntar, responder).
+<!--
+  ▶ PARA AÑADIR EL VIDEO (con play/pausa):
+  Edita este README en GitHub (botón ✏️) y ARRASTRA tu .mp4/.mov justo aquí.
+  GitHub lo sube y genera una URL https://github.com/user-attachments/assets/...
+  que se reproduce con CONTROLES. Reemplaza el bloque de arriba por esa URL (sola),
+  o por una de estas líneas:
+
+  <video src="https://github.com/user-attachments/assets/TU-VIDEO" controls width="100%"></video>
+  <video src="docs/images/demo.mp4" controls width="100%"></video>   (si commiteas el mp4)
+  <img src="docs/images/demo.gif" width="100%">                       (gif: autoplay, sin controles)
+-->
+
+> En el demo se ve: transcripción bilingüe en vivo, el panel 🧠 con resumen/ideas/alerta del copiloto, la detección de "¿me preguntan a mí?" con respuesta sugerida al instante, y el panel lateral de respuestas a pedido.
 
 ---
 
@@ -42,6 +53,47 @@ Es un **copiloto de reuniones que corre 100% en tu máquina**. Captura el audio 
 Todo en una **ventana flotante, sin marco y siempre encima**, que arrastras donde quieras.
 
 > Pensado para **Fedora + Wayland + NVIDIA**. El audio nunca sale de tu equipo: solo el **texto** de la transcripción viaja a Claude.
+
+---
+
+## La ventana por dentro
+
+Una sola ventana flotante reúne todo. Así se reparte:
+
+<!-- Captura: sube una LIMPIA (sin datos de cliente) como docs/images/screenshot-ventana.png
+     y descomenta la línea de abajo:
+<div align="center">
+<img src="docs/images/screenshot-ventana.png" alt="Ventana nativa del copiloto" width="85%">
+</div>
+-->
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  capturando            ⏸ pausar · tema · limpiar · – · ⤢ · ✕      │  barra superior
+├──────────────────────────────────────┬───────────────────────────┤
+│  PANEL DEL COPILOTO 🧠                │  PESTAÑAS  💡 📝 ❓ 🙋 💬 📋 │  panel lateral
+│  resumen · ideas · alerta            │                           │  (respuestas
+│                                      │   Respuestas a pedido      │   a pedido)
+│  TRANSCRIPCIÓN EN VIVO                │   con historial + hora     │
+│  (negrita = frase confirmada)        │                           │
+│  ...parcial en cursiva mientras hablas│   🔄 actualizar · 💾 ctx   │
+│ ┌──────────────────────────────────┐ │   🧹 limpiar · copiar · ✕  │
+│ │ 💡 Respuesta sugerida            │ │                           │
+│ └──────────────────────────────────┘ │                           │
+├──────────────────────────────────────┴───────────────────────────┤
+│  [ 💡 Ideas ] [ 📝 Resumen ] [ ❓ ¿Qué pregunto? ] [ 🙋 Responder ] │  acciones rápidas
+├──────────────────────────────────────────────────────────────────┤
+│  [ Pregúntale a Claude sobre la reunión… ]            [ Preguntar ]│  caja de preguntas
+└──────────────────────────────────────────────────────────────────┘
+```
+
+- **Barra superior** — el **estado** (capturando · pensando · pausado · error) y los controles: **⏸ pausar** la captura (descarta el audio sin cerrar nada), **tema** (cicla oscuro · claro · vidrio · vidrio legible), **limpiar** la transcripción, **–** minimizar, **⤢** expandir, **✕** cerrar (mata el proceso).
+- **Panel del copiloto 🧠** — cada `interval_s` segundos: una línea de **resumen** de lo que se habla, **ideas** para aportar, y una **alerta** si te asignan una tarea o se toma una decisión.
+- **Transcripción en vivo** — las **frases confirmadas** (con auto-scroll); el **parcial** va en cursiva mientras alguien habla.
+- **💡 Respuesta sugerida** — aparece **sola** cuando detecta que te preguntan a *ti* (por tu nombre o en segunda persona).
+- **Panel lateral de respuestas a pedido** — pestañas **💡 Ideas · 📝 Resumen · ❓ Preguntas · 🙋 Responder · 💬 Pregunta libre · 📋 Contexto** (esta última es editable: escribes el *briefing* de la sesión). Las respuestas se **acumulan con su hora** (historial, no se pisan). Acciones: **🔄 actualizar**, **💾 guardar contexto**, **🧹 limpiar**, **copiar**, **✕** cerrar el panel.
+- **Acciones rápidas** — un toque pide *ideas / resumen / qué preguntar / cómo responder* al instante.
+- **Caja de preguntas** — escríbele lo que sea; Claude responde con el contexto de la reunión.
 
 ---
 
