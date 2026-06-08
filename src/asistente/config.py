@@ -65,6 +65,18 @@ class ContextCfg(BaseModel):
     max_chars: int = 2000     # presupuesto de caracteres del contexto compuesto
 
 
+class BrainCfg(BaseModel):
+    # Qué LLM usa el copiloto: "claude" (claude -p, suscripción) o "ollama" (local).
+    backend: str = "claude"
+
+
+class OllamaCfg(BaseModel):
+    # Modelo local. En 8GB con el ASR cargado, usa ≤4B (qwen3-vl:4b, gemma4:e2b…);
+    # un 9B solo cabe si el ASR no está en la misma GPU.
+    model: str = "qwen3.5:9b"
+    host: str = "http://127.0.0.1:11434"
+
+
 class ClaudeCfg(BaseModel):
     model: str = "haiku"
 
@@ -85,6 +97,8 @@ class Config(BaseModel):
     nemotron: NemotronCfg = NemotronCfg()
     asr: AsrCfg = AsrCfg()
     context: ContextCfg = ContextCfg()
+    brain: BrainCfg = BrainCfg()
+    ollama: OllamaCfg = OllamaCfg()
     claude: ClaudeCfg = ClaudeCfg()
     copilot: CopilotCfg = CopilotCfg()
     server: ServerCfg = ServerCfg()

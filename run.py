@@ -51,8 +51,13 @@ def main() -> None:
         print("     Seguramente otra instancia del asistente sigue corriendo.")
         print("     Ciérrala primero:  pkill -f run.py   (o cierra su ventana)\n")
         sys.exit(1)
-    print("Iniciando cerebro Claude...")
-    brain = WarmClaude(model=cfg.claude.model)
+    if cfg.brain.backend == "ollama":
+        from asistente.brain.ollama_client import OllamaBrain
+        print(f"Cerebro: Ollama local ({cfg.ollama.model})")
+        brain = OllamaBrain(model=cfg.ollama.model, host=cfg.ollama.host)
+    else:
+        print("Iniciando cerebro Claude...")
+        brain = WarmClaude(model=cfg.claude.model)
     app = create_app(cfg, brain=brain, start_audio=False)
 
     # Captura + transcripción en hilos; empuja transcript al broadcast del server.

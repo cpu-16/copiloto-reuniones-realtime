@@ -72,6 +72,17 @@ window = 12          # frases en la ventana rodante
 summary_every = 8    # cada cuántos finales se actualiza el resumen acumulativo
 max_chars = 2000     # presupuesto de caracteres del contexto enviado a Claude
 
+[brain]
+# Qué LLM da las sugerencias:
+#   "claude" = claude -p (suscripción, sin API key) — mejor calidad
+#   "ollama" = LLM local (sin nube) — prueba la velocidad con scripts/derisk_ollama.py
+backend = "claude"
+
+[ollama]
+# Modelo local (cuando backend="ollama"). En 8GB con el ASR cargado, usa ≤4B.
+model = "qwen3.5:9b"
+host = "http://127.0.0.1:11434"
+
 [claude]
 model = "haiku"
 
